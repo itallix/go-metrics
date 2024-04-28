@@ -1,6 +1,6 @@
 module github.com/itallix/go-metrics
 
-go 1.22.2
+go 1.21.9
 
 require (
 	go.uber.org/multierr v1.10.0 // indirect
