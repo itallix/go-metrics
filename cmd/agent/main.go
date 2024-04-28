@@ -5,9 +5,12 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
 	"reflect"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -95,6 +98,9 @@ func (m *Metrics) send() {
 }
 
 func main() {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	tickerPoll := time.NewTicker(pollIntervalSeconds * time.Second)
 	reportPoll := time.NewTicker(reportIntervalSeconds * time.Second)
 
@@ -113,6 +119,6 @@ func main() {
 		}
 	}()
 
-	// FIXME consider using graceful shutdown
-	select {}
+	<-quit
+	log.Println("Shutting down gracefully")
 }
