@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,25 +19,26 @@ import (
 const (
 	pollIntervalSeconds   = 2
 	reportIntervalSeconds = 10
-	metricsServerUrl      = "http://localhost:8080"
+	requestTimeoutSeconds = 10
+	metricsServerURL      = "http://localhost:8080"
 )
-
-var registeredMetrics = []string{
-	"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
-	"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
-	"NextGC", "NumForcedGC", "NumGC", "OtherSys", "PauseTotalNs", "StackInuse", "StackSys", "Sys", "TotalAlloc",
-}
 
 type Metrics struct {
 	runtime.MemStats
-	PollCount   uint64
-	RandomValue uint64
-	values      map[string]any
+	PollCount         uint64
+	RandomValue       uint64
+	Values            map[string]any
+	RegisteredMetrics []string
 }
 
 func NewMetrics() *Metrics {
 	return &Metrics{
-		values: make(map[string]any),
+		Values: make(map[string]any),
+		RegisteredMetrics: []string{
+			"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
+			"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
+			"NextGC", "NumForcedGC", "NumGC", "OtherSys", "PauseTotalNs", "StackInuse", "StackSys", "Sys", "TotalAlloc",
+		},
 	}
 }
 
@@ -43,38 +46,53 @@ func (m *Metrics) collect() {
 	runtime.ReadMemStats(&m.MemStats)
 
 	m.PollCount++
-	source := rand.NewSource(time.Now().UnixNano())
-	m.RandomValue = rand.New(source).Uint64()
+
+	var randomValue uint64
+	err := binary.Read(rand.Reader, binary.BigEndian, &randomValue)
+	if err != nil {
+		log.Fatalf("error generating random number: %v", err)
+	}
+	m.RandomValue = randomValue
 
 	typ := reflect.TypeOf(m.MemStats)
 	val := reflect.ValueOf(m.MemStats)
 	sTyp := reflect.TypeOf(m.MemStats.BySize)
 	sVal := reflect.ValueOf(m.MemStats.BySize)
-	for _, mm := range registeredMetrics {
+	for _, mm := range m.RegisteredMetrics {
 		_, found := typ.FieldByName(mm)
 		if !found {
 			_, found = sTyp.FieldByName(mm)
 			if !found {
 				log.Printf("Metric '%s' was not found", mm)
 			}
-			m.values[mm] = sVal.FieldByName(mm).Interface()
+			m.Values[mm] = sVal.FieldByName(mm).Interface()
 			continue
 		}
-		m.values[mm] = val.FieldByName(mm).Interface()
+		m.Values[mm] = val.FieldByName(mm).Interface()
 	}
-	m.values["RandomValue"] = m.RandomValue
+	m.Values["RandomValue"] = m.RandomValue
 }
 
 func (m *Metrics) send() {
 	var wg sync.WaitGroup
-	results := make(chan string, len(m.values))
+	results := make(chan string, len(m.Values))
 
-	for id, val := range m.values {
+	for id, val := range m.Values {
 		wg.Add(1)
 		go func(id, val any) {
 			defer wg.Done()
 			metricsServerPath := fmt.Sprintf("/update/gauge/%s/%d", id, val)
-			resp, err := http.Post(metricsServerUrl+metricsServerPath, "text/plain", nil)
+			ctx, cancel := context.WithTimeout(context.Background(), requestTimeoutSeconds*time.Second)
+			defer cancel()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricsServerURL+metricsServerPath, nil)
+			if err != nil {
+				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
+				return
+			}
+			req.Header.Set("Content-Type", "text/plain")
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				results <- fmt.Sprintf("Error fetching %s: %v", id, err)
 				return
@@ -93,7 +111,7 @@ func (m *Metrics) send() {
 	}()
 
 	for result := range results {
-		fmt.Println(result)
+		log.Println(result)
 	}
 }
 
@@ -111,7 +129,7 @@ func main() {
 			select {
 			case <-tickerPoll.C:
 				currentMetrics.collect()
-				log.Println(currentMetrics.values)
+				log.Println(currentMetrics.Values)
 			case <-reportPoll.C:
 				log.Println("Sending metrics...")
 				currentMetrics.send()
