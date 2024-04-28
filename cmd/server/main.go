@@ -104,14 +104,14 @@ func main() {
 	mux.HandleFunc("/update/", metricHandler)
 
 	server := &http.Server{
-		Addr:         ":3001",
+		Addr:         ":8080",
 		Handler:      mux,
 		ReadTimeout:  ReadTimeoutSeconds * time.Second,
 		WriteTimeout: WriteTimeoutSeconds * time.Second,
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
 
-	logger.Info("Server is starting on port 3001...")
+	logger.Info("Server is starting on port 8080...")
 	if err = server.ListenAndServe(); err != nil {
 		logger.Fatal("Error starting server", zap.Error(err))
 	}

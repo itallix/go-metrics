@@ -17,7 +17,7 @@ import (
 const (
 	pollIntervalSeconds   = 2
 	reportIntervalSeconds = 10
-	metricsServerUrl      = "http://localhost:3001"
+	metricsServerUrl      = "http://localhost:8080"
 )
 
 var registeredMetrics = []string{
