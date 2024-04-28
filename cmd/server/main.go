@@ -1,12 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 type MemStorage struct {
@@ -77,16 +79,40 @@ func metricHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Updating metric '%s' of type '%s' with value '%s'\n", metricName, metricType, metricValue)
+	log.Printf("Updating metric '%s' of type '%s' with value '%s'\n", metricName, metricType, metricValue)
 	w.WriteHeader(http.StatusOK)
 }
 
+const (
+	ReadTimeoutSeconds  = 5
+	WriteTimeoutSeconds = 10
+	IdleTimeoutSeconds  = 15
+)
+
 func main() {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Cannot instantiate zap logger: %s", err)
+	}
+	defer func() {
+		if deferErr := logger.Sync(); deferErr != nil {
+			logger.Error("Failed to sync logger", zap.Error(deferErr))
+		}
+	}()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/update/", metricHandler)
-	err := http.ListenAndServe(":8080", mux)
-	if err != nil {
-		log.Fatal("Cannot start server")
+
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      mux,
+		ReadTimeout:  ReadTimeoutSeconds * time.Second,
+		WriteTimeout: WriteTimeoutSeconds * time.Second,
+		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
-	fmt.Println("Server has started on port 8080...")
+
+	logger.Info("Server is starting on port 8080...")
+	if err = server.ListenAndServe(); err != nil {
+		logger.Fatal("Error starting server", zap.Error(err))
+	}
 }
