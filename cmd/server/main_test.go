@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	handler2 "github.com/itallix/go-metrics/internal/handler"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,7 +62,7 @@ func TestMetricHandler(t *testing.T) {
 		},
 	}
 
-	handler := http.HandlerFunc(metricHandler)
+	handler := http.HandlerFunc(handler2.MetricHandler)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
