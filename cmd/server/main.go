@@ -11,6 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
+type Storage interface {
+	Set(name string, value float64)
+	Get(name string) (float64, bool)
+	Delete(name string)
+}
+
 type MemStorage struct {
 	metrics map[string]float64
 	mu      sync.RWMutex
@@ -20,12 +26,6 @@ func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		metrics: make(map[string]float64),
 	}
-}
-
-type Storage interface {
-	Set(name string, value float64)
-	Get(name string) (float64, bool)
-	Delete(name string)
 }
 
 func (m *MemStorage) Set(name string, value float64) {
@@ -87,6 +87,7 @@ const (
 	ReadTimeoutSeconds  = 5
 	WriteTimeoutSeconds = 10
 	IdleTimeoutSeconds  = 15
+	UpdatePath          = "/update/"
 )
 
 func main() {
@@ -101,7 +102,7 @@ func main() {
 	}()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/update/", metricHandler)
+	mux.HandleFunc(UpdatePath, metricHandler)
 
 	server := &http.Server{
 		Addr:         ":8080",
