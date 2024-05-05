@@ -73,7 +73,7 @@ func (m *Metrics) collect() {
 	m.Values["RandomValue"] = m.RandomValue
 }
 
-func (m *Metrics) send() {
+func (m *Metrics) send(ctx context.Context) {
 	var wg sync.WaitGroup
 	results := make(chan string, len(m.Values))
 
@@ -82,17 +82,16 @@ func (m *Metrics) send() {
 		go func(id, val any) {
 			defer wg.Done()
 			metricsServerPath := fmt.Sprintf("/update/gauge/%s/%d", id, val)
-			ctx, cancel := context.WithTimeout(context.Background(), requestTimeoutSeconds*time.Second)
+			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, metricsServerURL+metricsServerPath, nil)
+			req, err := http.NewRequestWithContext(tctx, http.MethodPost, metricsServerURL+metricsServerPath, nil)
 			if err != nil {
 				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
 				return
 			}
 			req.Header.Set("Content-Type", "text/plain")
-			client := &http.Client{}
-			resp, err := client.Do(req)
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				results <- fmt.Sprintf("Error fetching %s: %v", id, err)
 				return
@@ -118,6 +117,7 @@ func (m *Metrics) send() {
 func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	ctx := context.Background()
 
 	tickerPoll := time.NewTicker(pollIntervalSeconds * time.Second)
 	reportPoll := time.NewTicker(reportIntervalSeconds * time.Second)
@@ -132,7 +132,7 @@ func main() {
 				log.Println(currentMetrics.Values)
 			case <-reportPoll.C:
 				log.Println("Sending metrics...")
-				currentMetrics.send()
+				currentMetrics.send(ctx)
 			}
 		}
 	}()
