@@ -2,11 +2,12 @@ package controller
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/internal/storage"
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/storage"
 )
 
 type Result struct {
@@ -38,7 +39,7 @@ func (mc *MetricController) UpdateMetric(c *gin.Context) {
 			})
 			return
 		}
-		mc.counters.Set(metricName, int(metricValue))
+		mc.counters.Update(metricName, int(metricValue))
 	case "gauge":
 		metricValue, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
@@ -47,7 +48,7 @@ func (mc *MetricController) UpdateMetric(c *gin.Context) {
 			})
 			return
 		}
-		mc.gauges.Set(metricName, metricValue)
+		mc.gauges.Update(metricName, metricValue)
 	default:
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "metric is not found",

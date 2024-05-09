@@ -2,34 +2,34 @@ package storage
 
 import "sync"
 
-type Storage[T any] interface {
-	Set(name string, value T)
+type Storage[T float64 | int] interface {
+	Update(name string, value T)
 	Get(name string) (T, bool)
 	Copy() map[string]T
 }
 
-type MemStorage[T any] struct {
+type MemStorage[T float64 | int] struct {
 	store map[string]T
 	mu    sync.RWMutex
 }
 
-func NewMemStorage[T any]() *MemStorage[T] {
+func NewMemStorage[T float64 | int]() *MemStorage[T] {
 	return &MemStorage[T]{
 		store: make(map[string]T),
 	}
 }
 
-func (m *MemStorage[T]) Set(name string, value T) {
+func (m *MemStorage[T]) Update(name string, value T) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.store[name] = value
+	m.store[name] += value
 }
 
 func (m *MemStorage[T]) Get(name string) (T, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	counter, ok := m.store[name]
-	return counter, ok
+	val, ok := m.store[name]
+	return val, ok
 }
 
 func (m *MemStorage[T]) Copy() map[string]T {
