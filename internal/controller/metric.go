@@ -85,7 +85,7 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 			})
 			return
 		}
-		c.String(http.StatusOK, fmt.Sprintf("%f", val))
+		c.String(http.StatusOK, fmt.Sprintf("%g", val))
 	default:
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "metric is not found",
