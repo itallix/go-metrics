@@ -2,11 +2,12 @@ package controller
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/internal/storage"
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/storage"
 )
 
 type Result struct {
@@ -76,7 +77,7 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 			})
 			return
 		}
-		c.String(http.StatusOK, fmt.Sprintf("%d", val))
+		c.String(http.StatusOK, strconv.Itoa(val))
 	case "gauge":
 		val, ok := mc.gauges.Get(metricName)
 		if !ok {
@@ -91,4 +92,8 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 			"error": "metric is not found",
 		})
 	}
+}
+
+func (mc *MetricController) ListMetrics(c *gin.Context) {
+	c.String(http.StatusOK, "metrics")
 }

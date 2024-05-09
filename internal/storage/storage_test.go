@@ -1,12 +1,15 @@
-package storage
+package storage_test
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/itallix/go-metrics/internal/storage"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStorageTest_MetricExists(t *testing.T) {
-	memStorage := NewMemStorage[int]()
+	memStorage := storage.NewMemStorage[int]()
 	memStorage.Set("counter0", 123)
 	val, ok := memStorage.Get("counter0")
 	assert.True(t, ok)
@@ -14,7 +17,7 @@ func TestStorageTest_MetricExists(t *testing.T) {
 }
 
 func TestStorageTest_MetricDoesntExist(t *testing.T) {
-	memStorage := NewMemStorage[int]()
+	memStorage := storage.NewMemStorage[int]()
 	memStorage.Set("counter0", 123)
 
 	val, ok := memStorage.Get("metric")

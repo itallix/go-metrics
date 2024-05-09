@@ -82,7 +82,16 @@ func (m *Metrics) send(ctx context.Context) {
 		go func(id, val any) {
 			defer wg.Done()
 			metricsServerPath := fmt.Sprintf("/update/gauge/%s/%d", id, val)
-			resp, err := http.Post(metricsServerURL+metricsServerPath, "text/plain", nil)
+			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
+			defer cancel()
+
+			req, err := http.NewRequestWithContext(tctx, http.MethodPost, metricsServerURL+metricsServerPath, nil)
+			if err != nil {
+				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
+				return
+			}
+			req.Header.Set("Content-Type", "text/plain")
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				results <- fmt.Sprintf("Error fetching %s: %v", id, err)
 				return

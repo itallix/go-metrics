@@ -1,12 +1,14 @@
-package controller
+package controller_test
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/cmd/server"
-	"github.com/itallix/go-metrics/internal/storage"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/itallix/go-metrics/internal/controller"
+
+	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -21,35 +23,35 @@ func TestMetricHandler_Update(t *testing.T) {
 	}{
 		{
 			name:        "MetricDoesntExist",
-			givePath:    main.UpdatePath + "histogram/someMetric/123.0",
+			givePath:    "/update/histogram/someMetric/123.0",
 			giveMethod:  http.MethodPost,
 			wantStatus:  http.StatusBadRequest,
 			wantMessage: `{"error": "metric is not found"}`,
 		},
 		{
 			name:        "CounterMetricTypeIsNotSupported",
-			givePath:    main.UpdatePath + "counter/someMetric/123.0",
+			givePath:    "/update/counter/someMetric/123.0",
 			giveMethod:  http.MethodPost,
 			wantStatus:  http.StatusBadRequest,
 			wantMessage: `{"error": "metric type is not supported"}`,
 		},
 		{
 			name:        "GaugeMetricTypeIsNotSupported",
-			givePath:    main.UpdatePath + "gauge/someMetric/abc",
+			givePath:    "/update/gauge/someMetric/abc",
 			giveMethod:  http.MethodPost,
 			wantStatus:  http.StatusBadRequest,
 			wantMessage: `{"error": "metric type is not supported"}`,
 		},
 		{
 			name:        "CanUpdateCounter",
-			givePath:    main.UpdatePath + "counter/someMetric/123",
+			givePath:    "/update/counter/someMetric/123",
 			giveMethod:  http.MethodPost,
 			wantStatus:  http.StatusOK,
 			wantMessage: `{"message": "OK"}`,
 		},
 		{
 			name:        "CanUpdateGauge",
-			givePath:    main.UpdatePath + "gauge/someMetric/123.0",
+			givePath:    "/update/gauge/someMetric/123.0",
 			giveMethod:  http.MethodPost,
 			wantStatus:  http.StatusOK,
 			wantMessage: `{"message": "OK"}`,
@@ -58,9 +60,10 @@ func TestMetricHandler_Update(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	metricController := NewMetricController(storage.NewMemStorage[int](), storage.NewMemStorage[float64]()) // FIXME: introduce mock
+	metricController := controller.NewMetricController(
+		storage.NewMemStorage[int](), storage.NewMemStorage[float64]()) // FIXME: introduce mock
 
-	router.POST(main.UpdatePath+":metricType/:metricName/:metricValue", metricController.UpdateMetric)
+	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetric)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
