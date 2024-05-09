@@ -2,12 +2,11 @@ package controller
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/storage"
 	"log"
 	"net/http"
 	"strconv"
-
-	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/internal/storage"
 )
 
 type Result struct {
@@ -72,7 +71,7 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 	case "counter":
 		val, ok := mc.counters.Get(metricName)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 				"error": "metric is not found",
 			})
 			return
@@ -81,19 +80,30 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 	case "gauge":
 		val, ok := mc.gauges.Get(metricName)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 				"error": "metric is not found",
 			})
 			return
 		}
 		c.String(http.StatusOK, fmt.Sprintf("%f", val))
 	default:
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "metric is not found",
 		})
 	}
 }
 
 func (mc *MetricController) ListMetrics(c *gin.Context) {
-	c.String(http.StatusOK, "metrics")
+	_, _ = c.Writer.WriteString(fmt.Sprintln("<html><head><title>Metrics</title></head><body><ul>"))
+
+	for k, v := range mc.counters.Copy() {
+		_, _ = c.Writer.WriteString(fmt.Sprintf("<li>%s: %d</li>", k, v))
+	}
+
+	for k, v := range mc.gauges.Copy() {
+		_, _ = c.Writer.WriteString(fmt.Sprintf("<li>%s: %f</li>", k, v))
+	}
+
+	_, _ = c.Writer.WriteString(fmt.Sprintln("</ul></body></html>"))
+	c.Status(http.StatusOK)
 }
