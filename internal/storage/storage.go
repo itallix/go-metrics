@@ -3,6 +3,7 @@ package storage
 import "sync"
 
 type Storage[T float64 | int] interface {
+	Set(name string, value T)
 	Update(name string, value T)
 	Get(name string) (T, bool)
 	Copy() map[string]T
@@ -17,6 +18,12 @@ func NewMemStorage[T float64 | int]() *MemStorage[T] {
 	return &MemStorage[T]{
 		store: make(map[string]T),
 	}
+}
+
+func (m *MemStorage[T]) Set(name string, value T) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store[name] = value
 }
 
 func (m *MemStorage[T]) Update(name string, value T) {

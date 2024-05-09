@@ -48,7 +48,7 @@ func (mc *MetricController) UpdateMetric(c *gin.Context) {
 			})
 			return
 		}
-		mc.gauges.Update(metricName, metricValue)
+		mc.gauges.Set(metricName, metricValue)
 	default:
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "metric is not found",
