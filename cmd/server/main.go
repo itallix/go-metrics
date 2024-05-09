@@ -1,11 +1,12 @@
 package main
 
 import (
+	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/controller"
+	"github.com/itallix/go-metrics/internal/storage"
 	"log"
 	"net/http"
 	"time"
-
-	"github.com/itallix/go-metrics/internal/handler"
 
 	"go.uber.org/zap"
 )
@@ -15,6 +16,7 @@ const (
 	WriteTimeoutSeconds = 10
 	IdleTimeoutSeconds  = 15
 	UpdatePath          = "/update/"
+	ValuePath           = "/value/"
 )
 
 func main() {
@@ -28,12 +30,18 @@ func main() {
 		}
 	}()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc(UpdatePath, handler.MetricHandler)
+	router := gin.New()
+	router.Use(gin.Recovery())
+
+	metricController := controller.NewMetricController(
+		storage.NewMemStorage[int](), storage.NewMemStorage[float64]())
+
+	router.POST(UpdatePath+":metricType/:metricName/:metricValue", metricController.UpdateMetric)
+	router.GET(ValuePath+":metricType/:metricName", metricController.GetMetric)
 
 	server := &http.Server{
 		Addr:         ":8080",
-		Handler:      mux,
+		Handler:      router,
 		ReadTimeout:  ReadTimeoutSeconds * time.Second,
 		WriteTimeout: WriteTimeoutSeconds * time.Second,
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
