@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+const (
+	DefaultHost  = "localhost"
+	DefaultPort  = 8080
+	RequiredArgs = 2
+)
+
 type RunAddress struct {
 	Host string
 	Port int
@@ -13,8 +19,8 @@ type RunAddress struct {
 
 func NewRunAddress() *RunAddress {
 	return &RunAddress{
-		Host: "localhost",
-		Port: 8080,
+		Host: DefaultHost,
+		Port: DefaultPort,
 	}
 }
 
@@ -24,7 +30,7 @@ func (a *RunAddress) String() string {
 
 func (a *RunAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
-	if len(hp) != 2 {
+	if len(hp) != RequiredArgs {
 		return errors.New("need address in a form host:port")
 	}
 	port, err := strconv.Atoi(hp[1])

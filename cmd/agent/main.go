@@ -70,7 +70,7 @@ func (m *Metrics) collect() {
 	m.Values["RandomValue"] = m.RandomValue
 }
 
-func (m *Metrics) send(ctx context.Context, serverUrl string) {
+func (m *Metrics) send(ctx context.Context, serverURL string) {
 	var wg sync.WaitGroup
 	results := make(chan string, len(m.Values))
 
@@ -82,7 +82,7 @@ func (m *Metrics) send(ctx context.Context, serverUrl string) {
 			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(tctx, http.MethodPost, serverUrl+metricsServerPath, nil)
+			req, err := http.NewRequestWithContext(tctx, http.MethodPost, serverURL+metricsServerPath, nil)
 			if err != nil {
 				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
 				return
@@ -116,10 +116,10 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	ctx := context.Background()
 
-	serverUrl := parseFlags()
+	serverURL, intervalSettings := parseFlags()
 
-	tickerPoll := time.NewTicker(PollInterval)
-	reportPoll := time.NewTicker(ReportInterval)
+	tickerPoll := time.NewTicker(intervalSettings.PollInterval)
+	reportPoll := time.NewTicker(intervalSettings.ReportInterval)
 
 	currentMetrics := NewMetrics()
 
@@ -131,7 +131,7 @@ func main() {
 				log.Println(currentMetrics.Values)
 			case <-reportPoll.C:
 				log.Println("Sending metrics...")
-				currentMetrics.send(ctx, "http://"+serverUrl.String())
+				currentMetrics.send(ctx, "http://"+serverURL.String())
 			}
 		}
 	}()
