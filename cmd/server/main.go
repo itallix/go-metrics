@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -29,6 +30,8 @@ func main() {
 		}
 	}()
 
+	addr := parseFlags()
+
 	router := gin.New()
 	router.Use(gin.Recovery())
 
@@ -40,14 +43,14 @@ func main() {
 	router.GET("/value/:metricType/:metricName", metricController.GetMetric)
 
 	server := &http.Server{
-		Addr:         ":8080",
+		Addr:         addr.String(),
 		Handler:      router,
 		ReadTimeout:  ReadTimeoutSeconds * time.Second,
 		WriteTimeout: WriteTimeoutSeconds * time.Second,
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
 
-	logger.Info("Server is starting on port 8080...")
+	logger.Info(fmt.Sprintf("Server is starting on %v...", addr))
 	if err = server.ListenAndServe(); err != nil {
 		logger.Fatal("Error starting server", zap.Error(err))
 	}
