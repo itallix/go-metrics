@@ -1,15 +1,13 @@
 package flag
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 )
 
 const (
-	DefaultHost  = "localhost"
-	DefaultPort  = 8080
-	RequiredArgs = 2
+	DefaultHost = "localhost"
+	DefaultPort = 8080
 )
 
 type RunAddress struct {
@@ -30,9 +28,6 @@ func (a *RunAddress) String() string {
 
 func (a *RunAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
-	if len(hp) != RequiredArgs {
-		return errors.New("need address in a form host:port")
-	}
 	port, err := strconv.Atoi(hp[1])
 	if err != nil {
 		return err

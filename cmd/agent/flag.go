@@ -12,13 +12,20 @@ type IntervalSettings struct {
 	ReportInterval time.Duration
 }
 
+func NewIntervalSettings(pollInterval int64, reportInterval int64) *IntervalSettings {
+	return &IntervalSettings{
+		PollInterval:   time.Duration(pollInterval) * time.Second,
+		ReportInterval: time.Duration(reportInterval) * time.Second,
+	}
+}
+
 func parseFlags() (*mflag.RunAddress, *IntervalSettings) {
 	addr := mflag.NewRunAddress()
-	intervalSettings := &IntervalSettings{}
 	_ = flag.Value(addr)
 	flag.Var(addr, "a", "Net address host:port")
-	flag.DurationVar(&intervalSettings.PollInterval, "p", 2*time.Second, "Poll interval in seconds")
-	flag.DurationVar(&intervalSettings.ReportInterval, "r", 10*time.Second, "Report interval in seconds")
+	var pollInterval, reportInterval int64
+	flag.Int64Var(&pollInterval, "p", 2, "Poll interval in seconds")
+	flag.Int64Var(&reportInterval, "r", 10, "Report interval in seconds")
 	flag.Parse()
-	return addr, intervalSettings
+	return addr, NewIntervalSettings(pollInterval, reportInterval)
 }
