@@ -2,9 +2,18 @@ package main
 
 import (
 	"flag"
+	"log"
+	"os"
+	"strconv"
 	"time"
 
 	mflag "github.com/itallix/go-metrics/internal/flag"
+)
+
+const (
+	EnvAddress        = "ADDRESS"
+	EnvReportInterval = "REPORT_INTERVAL"
+	EnvPollInterval   = "POLL_INTERVAL"
 )
 
 type IntervalSettings struct {
@@ -27,5 +36,27 @@ func parseFlags() (*mflag.RunAddress, *IntervalSettings) {
 	flag.Int64Var(&pollInterval, "p", 2, "Poll interval in seconds")
 	flag.Int64Var(&reportInterval, "r", 10, "Report interval in seconds")
 	flag.Parse()
-	return addr, NewIntervalSettings(pollInterval, reportInterval)
+
+	intervalSettings := NewIntervalSettings(pollInterval, reportInterval)
+
+	if envAddr := os.Getenv(EnvAddress); envAddr != "" {
+		if err := addr.Set(envAddr); err != nil {
+			log.Fatalf("Cannot parse ADDRESS env var: %s", err)
+		}
+	}
+	if envPollInterval := os.Getenv(EnvPollInterval); envPollInterval != "" {
+		pollValue, err := strconv.ParseInt(envPollInterval, 10, 64)
+		if err != nil {
+			log.Fatalf("Cannot convert %s env var: %s", EnvPollInterval, envPollInterval)
+		}
+		intervalSettings.PollInterval = time.Duration(pollValue) * time.Second
+	}
+	if envReportInterval := os.Getenv(EnvReportInterval); envReportInterval != "" {
+		reportValue, err := strconv.ParseInt(envReportInterval, 10, 64)
+		if err != nil {
+			log.Fatalf("Cannot convert %s env var: %s", EnvReportInterval, envReportInterval)
+		}
+		intervalSettings.ReportInterval = time.Duration(reportValue) * time.Second
+	}
+	return addr, intervalSettings
 }
