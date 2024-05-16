@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -28,7 +28,7 @@ func NewIntervalSettings(pollInterval int64, reportInterval int64) *IntervalSett
 	}
 }
 
-func parseFlags() (*mflag.RunAddress, *IntervalSettings) {
+func parseFlags() (*mflag.RunAddress, *IntervalSettings, error) {
 	addr := mflag.NewRunAddress()
 	_ = flag.Value(addr)
 	flag.Var(addr, "a", "Net address host:port")
@@ -41,22 +41,22 @@ func parseFlags() (*mflag.RunAddress, *IntervalSettings) {
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {
 		if err := addr.Set(envAddr); err != nil {
-			log.Fatalf("Cannot parse ADDRESS env var: %s", err)
+			return nil, nil, fmt.Errorf("cannot parse ADDRESS env var: %w", err)
 		}
 	}
 	if envPollInterval := os.Getenv(EnvPollInterval); envPollInterval != "" {
 		pollValue, err := strconv.ParseInt(envPollInterval, 10, 64)
 		if err != nil {
-			log.Fatalf("Cannot convert %s env var: %s", EnvPollInterval, envPollInterval)
+			return nil, nil, fmt.Errorf("cannot convert %s env var: %s", EnvPollInterval, envPollInterval)
 		}
 		intervalSettings.PollInterval = time.Duration(pollValue) * time.Second
 	}
 	if envReportInterval := os.Getenv(EnvReportInterval); envReportInterval != "" {
 		reportValue, err := strconv.ParseInt(envReportInterval, 10, 64)
 		if err != nil {
-			log.Fatalf("Cannot convert %s env var: %s", EnvReportInterval, envReportInterval)
+			return nil, nil, fmt.Errorf("cannot convert %s env var: %s", EnvReportInterval, envReportInterval)
 		}
 		intervalSettings.ReportInterval = time.Duration(reportValue) * time.Second
 	}
-	return addr, intervalSettings
+	return addr, intervalSettings, nil
 }

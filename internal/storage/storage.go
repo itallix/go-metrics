@@ -40,6 +40,8 @@ func (m *MemStorage[T]) Get(name string) (T, bool) {
 }
 
 func (m *MemStorage[T]) Copy() map[string]T {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	clone := make(map[string]T, len(m.store))
 	for key, value := range m.store {
 		clone[key] = value

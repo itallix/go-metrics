@@ -30,7 +30,10 @@ func main() {
 		}
 	}()
 
-	addr := parseFlags()
+	addr, err := parseFlags()
+	if err != nil {
+		logger.Fatal(err.Error())
+	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -41,6 +44,9 @@ func main() {
 	router.GET("/", metricController.ListMetrics)
 	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetric)
 	router.GET("/value/:metricType/:metricName", metricController.GetMetric)
+	router.GET("/healthcheck", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 
 	server := &http.Server{
 		Addr:         addr.String(),

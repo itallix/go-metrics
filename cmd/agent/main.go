@@ -20,17 +20,25 @@ const (
 	requestTimeoutSeconds = 10
 )
 
-type Metrics struct {
+type Sender interface {
+	send(ctx context.Context, serverURL string)
+}
+
+type Collector interface {
+	collect()
+}
+
+type agent struct {
 	runtime.MemStats
-	PollCount         uint64
-	RandomValue       uint64
-	Values            map[string]any
+
+	Counter           uint64
+	Gauges            map[string]float64
 	RegisteredMetrics []string
 }
 
-func NewMetrics() *Metrics {
-	return &Metrics{
-		Values: make(map[string]any),
+func newAgent() *agent {
+	return &agent{
+		Gauges: make(map[string]float64),
 		RegisteredMetrics: []string{
 			"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
 			"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
@@ -39,18 +47,20 @@ func NewMetrics() *Metrics {
 	}
 }
 
-func (m *Metrics) collect() {
+func (m *agent) collect() {
 	runtime.ReadMemStats(&m.MemStats)
 
-	m.PollCount++
+	m.Counter++
 
-	var randomValue uint64
+	var randomValue float64
 	err := binary.Read(rand.Reader, binary.BigEndian, &randomValue)
 	if err != nil {
-		log.Fatalf("error generating random number: %v", err)
+		// TODO: integrate zap logger
+		log.Printf("error generating random number: %v", err)
 	}
-	m.RandomValue = randomValue
+	m.Gauges["RandomValue"] = randomValue
 
+	// TODO: consider refactor reflection part
 	typ := reflect.TypeOf(m.MemStats)
 	val := reflect.ValueOf(m.MemStats)
 	sTyp := reflect.TypeOf(m.MemStats.BySize)
@@ -62,27 +72,39 @@ func (m *Metrics) collect() {
 			if !found {
 				log.Printf("Metric '%s' was not found", mm)
 			}
-			m.Values[mm] = sVal.FieldByName(mm).Interface()
+			fieldVal := sVal.FieldByName(mm)
+			switch fieldVal.Kind() {
+			case reflect.Uint, reflect.Uint64, reflect.Uint32:
+				m.Gauges[mm] = float64(fieldVal.Uint())
+			default:
+				m.Gauges[mm] = fieldVal.Float()
+			}
 			continue
 		}
-		m.Values[mm] = val.FieldByName(mm).Interface()
+		fieldVal := val.FieldByName(mm)
+		switch fieldVal.Kind() {
+		case reflect.Uint, reflect.Uint64, reflect.Uint32:
+			m.Gauges[mm] = float64(fieldVal.Uint())
+		default:
+			m.Gauges[mm] = fieldVal.Float()
+		}
 	}
-	m.Values["RandomValue"] = m.RandomValue
 }
 
-func (m *Metrics) send(ctx context.Context, serverURL string) {
+func (m *agent) send(ctx context.Context, serverURL string) {
+	// TODO: consider replacing with http client that supports retries
 	var wg sync.WaitGroup
-	results := make(chan string, len(m.Values))
+	results := make(chan string, len(m.Gauges))
 
-	for id, val := range m.Values {
+	for id, val := range m.Gauges {
 		wg.Add(1)
-		go func(id, val any) {
+		go func(id string, val float64) {
 			defer wg.Done()
-			metricsServerPath := fmt.Sprintf("/update/gauge/%s/%d", id, val)
+			gaugeServerPath := fmt.Sprintf("/update/gauge/%s/%f", id, val)
 			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(tctx, http.MethodPost, serverURL+metricsServerPath, nil)
+			req, err := http.NewRequestWithContext(tctx, http.MethodPost, serverURL+gaugeServerPath, nil)
 			if err != nil {
 				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
 				return
@@ -96,10 +118,24 @@ func (m *Metrics) send(ctx context.Context, serverURL string) {
 			results <- fmt.Sprintf("Success %s: %s", id, resp.Status)
 			err = resp.Body.Close()
 			if err != nil {
-				log.Fatalf("Failed to close reponse body %v", err)
+				log.Printf("Failed to close reponse body %v\n", err)
 			}
 		}(id, val)
 	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// sending PollCount metric
+		counterServerPath := fmt.Sprintf("/update/counter/PollCount/%d", m.Counter)
+		resp, err := http.Post(serverURL+counterServerPath, "text/plain", nil)
+		defer func() { _ = resp.Body.Close() }()
+		if err != nil {
+			log.Printf("Issue sending PollCount to the server: %v", err)
+			return
+		}
+		m.Counter = 0
+	}()
 
 	go func() {
 		wg.Wait()
@@ -112,30 +148,46 @@ func (m *Metrics) send(ctx context.Context, serverURL string) {
 }
 
 func main() {
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	ctx := context.Background()
+	serverURL, intervalSettings, err := parseFlags()
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
 
-	serverURL, intervalSettings := parseFlags()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	tickerPoll := time.NewTicker(intervalSettings.PollInterval)
+	defer tickerPoll.Stop()
 	reportPoll := time.NewTicker(intervalSettings.ReportInterval)
+	defer reportPoll.Stop()
 
-	currentMetrics := NewMetrics()
+	metricsAgent := newAgent()
 
 	go func() {
 		for {
 			select {
 			case <-tickerPoll.C:
-				currentMetrics.collect()
-				log.Println(currentMetrics.Values)
+				metricsAgent.collect()
+				log.Println(metricsAgent.Gauges)
 			case <-reportPoll.C:
-				log.Println("Sending metrics...")
-				currentMetrics.send(ctx, "http://"+serverURL.String())
+				url := "http://" + serverURL.String()
+				resp, httpErr := http.Get(url + "/healthcheck")
+				if httpErr != nil {
+					log.Printf("Server is unavailable %v. Skip sending metrics...", httpErr)
+				} else {
+					_ = resp.Body.Close()
+					log.Println("Sending metrics...")
+					metricsAgent.send(ctx, url)
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
 
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down gracefully")
+	log.Println("Shutting down agent gracefully...")
+	cancel()
 }

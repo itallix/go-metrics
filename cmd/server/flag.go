@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"fmt"
 	"os"
 
 	mflag "github.com/itallix/go-metrics/internal/flag"
@@ -12,7 +12,7 @@ const (
 	EnvAddress = "ADDRESS"
 )
 
-func parseFlags() *mflag.RunAddress {
+func parseFlags() (*mflag.RunAddress, error) {
 	addr := mflag.NewRunAddress()
 	_ = flag.Value(addr)
 	flag.Var(addr, "a", "Net address host:port")
@@ -20,8 +20,8 @@ func parseFlags() *mflag.RunAddress {
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {
 		if err := addr.Set(envAddr); err != nil {
-			log.Fatalf("Cannot parse ADDRESS env var: %s", err)
+			return nil, fmt.Errorf("cannot parse ADDRESS env var: %w", err)
 		}
 	}
-	return addr
+	return addr, nil
 }

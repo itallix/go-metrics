@@ -7,14 +7,15 @@ import (
 )
 
 func TestCollectMetrics(t *testing.T) {
-	metrics := NewMetrics()
+	metrics := newAgent()
 
-	assert.Empty(t, metrics.Values)
+	assert.Empty(t, metrics.Gauges)
 
 	metrics.collect()
 
 	for _, key := range metrics.RegisteredMetrics {
-		_, exists := metrics.Values[key]
+		_, exists := metrics.Gauges[key]
 		assert.Truef(t, exists, "Expected key %s is missing in the map", key)
 	}
+	assert.Equal(t, uint64(1), metrics.Counter)
 }
