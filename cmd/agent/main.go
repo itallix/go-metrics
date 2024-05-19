@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/itallix/go-metrics/internal/logger"
 )
 
 const (
@@ -53,10 +55,8 @@ func (m *agent) collect() {
 	m.Counter++
 
 	var randomValue float64
-	err := binary.Read(rand.Reader, binary.BigEndian, &randomValue)
-	if err != nil {
-		// TODO: integrate zap logger
-		log.Printf("error generating random number: %v", err)
+	if err := binary.Read(rand.Reader, binary.BigEndian, &randomValue); err != nil {
+		logger.Log().Infof("error generating random number: %v", err)
 	}
 	m.Gauges["RandomValue"] = randomValue
 
@@ -70,7 +70,7 @@ func (m *agent) collect() {
 		if !found {
 			_, found = sTyp.FieldByName(mm)
 			if !found {
-				log.Printf("Metric '%s' was not found", mm)
+				logger.Log().Infof("Metric '%s' was not found", mm)
 			}
 			fieldVal := sVal.FieldByName(mm)
 			switch fieldVal.Kind() {
@@ -118,7 +118,7 @@ func (m *agent) send(ctx context.Context, serverURL string) {
 			results <- fmt.Sprintf("Success %s: %s", id, resp.Status)
 			err = resp.Body.Close()
 			if err != nil {
-				log.Printf("Failed to close reponse body %v\n", err)
+				logger.Log().Infof("Failed to close reponse body %v\n", err)
 			}
 		}(id, val)
 	}
@@ -131,7 +131,7 @@ func (m *agent) send(ctx context.Context, serverURL string) {
 		resp, err := http.Post(serverURL+counterServerPath, "text/plain", nil)
 		defer func() { _ = resp.Body.Close() }()
 		if err != nil {
-			log.Printf("Issue sending PollCount to the server: %v", err)
+			logger.Log().Infof("Issue sending PollCount to the server: %v", err)
 			return
 		}
 		m.Counter = 0
@@ -143,14 +143,23 @@ func (m *agent) send(ctx context.Context, serverURL string) {
 	}()
 
 	for result := range results {
-		log.Println(result)
+		logger.Log().Info(result)
 	}
 }
 
 func main() {
+	if err := logger.Initialize("debug"); err != nil {
+		log.Fatalf("Cannot instantiate zap logger: %s", err)
+	}
+	defer func() {
+		if deferErr := logger.Log().Sync(); deferErr != nil {
+			logger.Log().Errorf("Failed to sync logger: %s", deferErr)
+		}
+	}()
+
 	serverURL, intervalSettings, err := parseFlags()
 	if err != nil {
-		log.Fatalf(err.Error())
+		logger.Log().Fatalf("Cannot parse flags: %v", err.Error())
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -168,15 +177,15 @@ func main() {
 			select {
 			case <-tickerPoll.C:
 				metricsAgent.collect()
-				log.Println(metricsAgent.Gauges)
+				logger.Log().Infof("Collected metrics: %v", metricsAgent.Gauges)
 			case <-reportPoll.C:
 				url := "http://" + serverURL.String()
 				resp, httpErr := http.Get(url + "/healthcheck")
 				if httpErr != nil {
-					log.Printf("Server is unavailable %v. Skip sending metrics...", httpErr)
+					logger.Log().Infof("Server is unavailable %v. Skip sending metrics...", httpErr)
 				} else {
 					_ = resp.Body.Close()
-					log.Println("Sending metrics...")
+					logger.Log().Info("Sending metrics...")
 					metricsAgent.send(ctx, url)
 				}
 			case <-ctx.Done():
@@ -188,6 +197,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down agent gracefully...")
+	logger.Log().Info("Shutting down agent gracefully...")
 	cancel()
 }

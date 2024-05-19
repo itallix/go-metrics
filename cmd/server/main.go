@@ -1,16 +1,16 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/itallix/go-metrics/internal/logger"
+	"github.com/itallix/go-metrics/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 	"github.com/itallix/go-metrics/internal/controller"
 	"github.com/itallix/go-metrics/internal/storage"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -20,23 +20,23 @@ const (
 )
 
 func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
+	if err := logger.Initialize("debug"); err != nil {
 		log.Fatalf("Cannot instantiate zap logger: %s", err)
 	}
 	defer func() {
-		if deferErr := logger.Sync(); deferErr != nil {
-			logger.Error("Failed to sync logger", zap.Error(deferErr))
+		if deferErr := logger.Log().Sync(); deferErr != nil {
+			logger.Log().Errorf("Failed to sync logger: %s", deferErr)
 		}
 	}()
 
 	addr, err := parseFlags()
 	if err != nil {
-		logger.Fatal(err.Error())
+		logger.Log().Errorf("Can't parse flags: %v", err.Error())
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.LoggerWithZap())
 
 	metricController := controller.NewMetricController(
 		storage.NewMemStorage[int](), storage.NewMemStorage[float64]())
@@ -56,8 +56,8 @@ func main() {
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
 
-	logger.Info(fmt.Sprintf("Server is starting on %v...", addr))
+	logger.Log().Infof("Server is starting on %s...", addr)
 	if err = server.ListenAndServe(); err != nil {
-		logger.Fatal("Error starting server", zap.Error(err))
+		logger.Log().Fatalf("Error starting server: %v", err)
 	}
 }

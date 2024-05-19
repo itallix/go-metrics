@@ -2,9 +2,10 @@ package controller
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/itallix/go-metrics/internal/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/itallix/go-metrics/internal/storage"
@@ -56,7 +57,7 @@ func (mc *MetricController) UpdateMetric(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Updating metric '%s' of type '%s' with value '%s'\n", metricName, metricType, metricValue)
+	logger.Log().Infof("Updating metric '%s' of type '%s' with value '%s'", metricName, metricType, metricValue)
 
 	c.Header("Content-Type", "application/json")
 	c.JSON(http.StatusOK, Result{
