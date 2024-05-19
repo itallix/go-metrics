@@ -36,7 +36,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(middleware.LoggerWithZap())
+	router.Use(middleware.LoggerWithZap(logger.Log()))
 
 	metricController := controller.NewMetricController(
 		storage.NewMemStorage[int](), storage.NewMemStorage[float64]())
