@@ -1,13 +1,17 @@
 package main
 
 import (
+	"github.com/go-resty/resty/v2"
+	"github.com/jarcoal/httpmock"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCollectMetrics(t *testing.T) {
-	metrics := newAgent("serverURL")
+	client := resty.New()
+	httpmock.ActivateNonDefault(client.GetClient())
+	metrics := newAgent(client)
 
 	assert.Empty(t, metrics.Gauges)
 

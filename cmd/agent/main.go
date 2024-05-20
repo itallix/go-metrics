@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	"log"
 	"net/http"
 	"os"
@@ -37,16 +38,16 @@ type Collector interface {
 type agent struct {
 	runtime.MemStats
 
-	ServerURL         string
+	Client            *resty.Client
 	Counter           int64
 	Gauges            map[string]float64
 	RegisteredMetrics []string
 }
 
-func newAgent(serverURL string) *agent {
+func newAgent(client *resty.Client) *agent {
 	return &agent{
-		ServerURL: serverURL,
-		Gauges:    make(map[string]float64),
+		Client: client,
+		Gauges: make(map[string]float64),
 		RegisteredMetrics: []string{
 			"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
 			"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
@@ -101,7 +102,7 @@ func (m *agent) send(ctx context.Context) {
 	// TODO: consider replacing with http client that supports retries
 	var wg sync.WaitGroup
 	results := make(chan string, len(m.Gauges))
-	requestURL := m.ServerURL + "/update"
+	requestPath := "/update"
 
 	for id, val := range m.Gauges {
 		wg.Add(1)
@@ -110,28 +111,23 @@ func (m *agent) send(ctx context.Context) {
 			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 			defer cancel()
 
+			// Use encoder to pass autotests
 			var buf bytes.Buffer
 			encoder := json.NewEncoder(&buf)
 			if err := encoder.Encode(model.NewGauge(id, &val)); err != nil {
 				logger.Log().Infof("Issue encoding gauge data to json: %v", err)
 				return
 			}
-			req, err := http.NewRequestWithContext(tctx, http.MethodPost, requestURL, &buf)
+			resp, err := m.Client.R().
+				SetContext(tctx).
+				SetBody(&buf).
+				Post(requestPath)
+
 			if err != nil {
-				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
+				results <- fmt.Sprintf("Issue sending update request to the server: %v", err)
 				return
 			}
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				results <- fmt.Sprintf("Error fetching %s: %v", id, err)
-				return
-			}
-			results <- fmt.Sprintf("Success %s: %s", id, resp.Status)
-			err = resp.Body.Close()
-			if err != nil {
-				logger.Log().Infof("Failed to close reponse body %v\n", err)
-			}
+			results <- fmt.Sprintf("Success %s: %d", id, resp.StatusCode())
 		}(id, val)
 	}
 
@@ -139,18 +135,19 @@ func (m *agent) send(ctx context.Context) {
 	go func() {
 		defer wg.Done()
 		// sending PollCount metric
-		var buf bytes.Buffer
-		encoder := json.NewEncoder(&buf)
-		if err := encoder.Encode(model.NewCounter("PollCount", &m.Counter)); err != nil {
-			logger.Log().Infof("Issue encoding counter data to json: %v", err)
-			return
-		}
-		resp, err := http.Post(requestURL, "application/json", &buf)
-		defer func() { _ = resp.Body.Close() }()
+		tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
+		defer cancel()
+
+		resp, err := m.Client.R().
+			SetContext(tctx).
+			SetBody(model.NewCounter("PollCount", &m.Counter)).
+			Post(requestPath)
+
 		if err != nil {
 			logger.Log().Infof("Issue sending PollCount to the server: %v", err)
 			return
 		}
+		results <- fmt.Sprintf("Success %s: %d", "PollCount", resp.StatusCode())
 		m.Counter = 0
 	}()
 
@@ -186,8 +183,9 @@ func main() {
 	reportPoll := time.NewTicker(intervalSettings.ReportInterval)
 	defer reportPoll.Stop()
 
-	httpServerURL := "http://" + serverURL.String()
-	metricsAgent := newAgent(httpServerURL)
+	client := resty.New().SetBaseURL("http://"+serverURL.String()).
+		SetHeader("Content-Type", "application/json")
+	metricsAgent := newAgent(client)
 
 	go func() {
 		for {
@@ -196,11 +194,12 @@ func main() {
 				metricsAgent.collect()
 				logger.Log().Infof("Collected metrics: %v", metricsAgent.Gauges)
 			case <-reportPoll.C:
-				resp, httpErr := http.Get(httpServerURL)
+				resp, httpErr := client.R().
+					SetContext(ctx).
+					Get("healthcheck")
 				if httpErr != nil {
 					logger.Log().Infof("Server is unavailable %v. Skip sending metrics...", httpErr)
-				} else {
-					_ = resp.Body.Close()
+				} else if resp.StatusCode() == http.StatusOK {
 					logger.Log().Info("Sending metrics...")
 					metricsAgent.send(ctx)
 				}
