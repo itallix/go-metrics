@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/itallix/go-metrics/internal/model"
+
 	"github.com/itallix/go-metrics/internal/logger"
 )
 
@@ -23,7 +27,7 @@ const (
 )
 
 type Sender interface {
-	send(ctx context.Context, serverURL string)
+	send(ctx context.Context)
 }
 
 type Collector interface {
@@ -33,14 +37,16 @@ type Collector interface {
 type agent struct {
 	runtime.MemStats
 
-	Counter           uint64
+	ServerURL         string
+	Counter           int64
 	Gauges            map[string]float64
 	RegisteredMetrics []string
 }
 
-func newAgent() *agent {
+func newAgent(serverURL string) *agent {
 	return &agent{
-		Gauges: make(map[string]float64),
+		ServerURL: serverURL,
+		Gauges:    make(map[string]float64),
 		RegisteredMetrics: []string{
 			"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
 			"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
@@ -91,25 +97,31 @@ func (m *agent) collect() {
 	}
 }
 
-func (m *agent) send(ctx context.Context, serverURL string) {
+func (m *agent) send(ctx context.Context) {
 	// TODO: consider replacing with http client that supports retries
 	var wg sync.WaitGroup
 	results := make(chan string, len(m.Gauges))
+	requestURL := m.ServerURL + "/update"
 
 	for id, val := range m.Gauges {
 		wg.Add(1)
 		go func(id string, val float64) {
 			defer wg.Done()
-			gaugeServerPath := fmt.Sprintf("/update/gauge/%s/%f", id, val)
 			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(tctx, http.MethodPost, serverURL+gaugeServerPath, nil)
+			var buf bytes.Buffer
+			encoder := json.NewEncoder(&buf)
+			if err := encoder.Encode(model.NewGauge(id, &val)); err != nil {
+				logger.Log().Infof("Issue encoding gauge data to json: %v", err)
+				return
+			}
+			req, err := http.NewRequestWithContext(tctx, http.MethodPost, requestURL, &buf)
 			if err != nil {
 				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
 				return
 			}
-			req.Header.Set("Content-Type", "text/plain")
+			req.Header.Set("Content-Type", "application/json")
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				results <- fmt.Sprintf("Error fetching %s: %v", id, err)
@@ -127,8 +139,13 @@ func (m *agent) send(ctx context.Context, serverURL string) {
 	go func() {
 		defer wg.Done()
 		// sending PollCount metric
-		counterServerPath := fmt.Sprintf("/update/counter/PollCount/%d", m.Counter)
-		resp, err := http.Post(serverURL+counterServerPath, "text/plain", nil)
+		var buf bytes.Buffer
+		encoder := json.NewEncoder(&buf)
+		if err := encoder.Encode(model.NewCounter("PollCount", &m.Counter)); err != nil {
+			logger.Log().Infof("Issue encoding counter data to json: %v", err)
+			return
+		}
+		resp, err := http.Post(requestURL, "application/json", &buf)
 		defer func() { _ = resp.Body.Close() }()
 		if err != nil {
 			logger.Log().Infof("Issue sending PollCount to the server: %v", err)
@@ -163,14 +180,14 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	tickerPoll := time.NewTicker(intervalSettings.PollInterval)
 	defer tickerPoll.Stop()
 	reportPoll := time.NewTicker(intervalSettings.ReportInterval)
 	defer reportPoll.Stop()
 
-	metricsAgent := newAgent()
+	httpServerURL := "http://" + serverURL.String()
+	metricsAgent := newAgent(httpServerURL)
 
 	go func() {
 		for {
@@ -179,14 +196,13 @@ func main() {
 				metricsAgent.collect()
 				logger.Log().Infof("Collected metrics: %v", metricsAgent.Gauges)
 			case <-reportPoll.C:
-				url := "http://" + serverURL.String()
-				resp, httpErr := http.Get(url + "/healthcheck")
+				resp, httpErr := http.Get(httpServerURL)
 				if httpErr != nil {
 					logger.Log().Infof("Server is unavailable %v. Skip sending metrics...", httpErr)
 				} else {
 					_ = resp.Body.Close()
 					logger.Log().Info("Sending metrics...")
-					metricsAgent.send(ctx, url)
+					metricsAgent.send(ctx)
 				}
 			case <-ctx.Done():
 				return

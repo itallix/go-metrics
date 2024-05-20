@@ -9,12 +9,12 @@ import (
 )
 
 func TestStorageTest_UpdateValue(t *testing.T) {
-	memStorage := storage.NewMemStorage[int]()
+	memStorage := storage.NewMemStorage[int64]()
 	memStorage.Update("counter0", 123)
 	memStorage.Update("counter0", 132)
 	val, ok := memStorage.Get("counter0")
 	assert.True(t, ok)
-	assert.Equal(t, 255, val)
+	assert.Equal(t, int64(255), val)
 }
 
 func TestStorageTest_SetValue(t *testing.T) {
@@ -27,7 +27,7 @@ func TestStorageTest_SetValue(t *testing.T) {
 }
 
 func TestStorageTest_ValueDoesntExist(t *testing.T) {
-	memStorage := storage.NewMemStorage[int]()
+	memStorage := storage.NewMemStorage[int64]()
 	memStorage.Update("counter0", 123)
 
 	val, ok := memStorage.Get("metric")

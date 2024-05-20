@@ -7,7 +7,7 @@ import (
 )
 
 func TestCollectMetrics(t *testing.T) {
-	metrics := newAgent()
+	metrics := newAgent("serverURL")
 
 	assert.Empty(t, metrics.Gauges)
 
@@ -17,5 +17,5 @@ func TestCollectMetrics(t *testing.T) {
 		_, exists := metrics.Gauges[key]
 		assert.Truef(t, exists, "Expected key %s is missing in the map", key)
 	}
-	assert.Equal(t, uint64(1), metrics.Counter)
+	assert.Equal(t, int64(1), metrics.Counter)
 }

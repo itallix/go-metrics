@@ -39,11 +39,11 @@ func main() {
 	router.Use(middleware.LoggerWithZap(logger.Log()))
 
 	metricController := controller.NewMetricController(
-		storage.NewMemStorage[int](), storage.NewMemStorage[float64]())
+		storage.NewMemStorage[int64](), storage.NewMemStorage[float64]())
 
 	router.GET("/", metricController.ListMetrics)
-	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetric)
-	router.GET("/value/:metricType/:metricName", metricController.GetMetric)
+	router.POST("/update", metricController.UpdateMetric)
+	router.POST("/value", metricController.GetMetric)
 	router.GET("/healthcheck", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
