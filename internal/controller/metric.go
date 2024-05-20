@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"strconv"
 
@@ -65,18 +66,43 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 }
 
 func (mc *MetricController) ListMetrics(c *gin.Context) {
-	_, _ = c.Writer.WriteString(fmt.Sprintln("<html><head><title>Metrics</title></head><body><ul>"))
+	const tpl = `
+<html>
+<head>
+	<title>Metrics</title>
+</head>
+<body>
+	<ul>
+		{{- range $key, $value := .Counters }}
+		<li>{{ $key }}: {{ $value }}</li>
+		{{- end }}
+		{{- range $key, $value := .Gauges }}
+		<li>{{ $key }}: {{ $value }}</li>
+		{{- end }}
+	</ul>
+</body>
+</html>`
 
-	for k, v := range mc.metricSrv.GetCounters() {
-		_, _ = c.Writer.WriteString(fmt.Sprintf("<li>%s: %d</li>", k, v))
+	t, err := template.New("webpage").Parse(tpl)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Error rendering template")
+		return
 	}
 
-	for k, v := range mc.metricSrv.GetGauges() {
-		_, _ = c.Writer.WriteString(fmt.Sprintf("<li>%s: %f</li>", k, v))
+	data := struct {
+		Counters map[string]int64
+		Gauges   map[string]float64
+	}{
+		Counters: mc.metricSrv.GetCounters(),
+		Gauges:   mc.metricSrv.GetGauges(),
 	}
 
-	_, _ = c.Writer.WriteString(fmt.Sprintln("</ul></body></html>"))
+	c.Header("Content-Type", "text/html")
 	c.Status(http.StatusOK)
+
+	if err := t.Execute(c.Writer, data); err != nil {
+		c.String(http.StatusInternalServerError, "Error executing template")
+	}
 }
 
 type MetricQuery struct {

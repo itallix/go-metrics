@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -114,14 +115,20 @@ func (m *agent) send(ctx context.Context) {
 
 			// Use encoder to pass autotests
 			var buf bytes.Buffer
-			encoder := json.NewEncoder(&buf)
+			gz := gzip.NewWriter(&buf)
+			encoder := json.NewEncoder(gz)
 			if err := encoder.Encode(model.NewGauge(id, &val)); err != nil {
 				logger.Log().Infof("Issue encoding gauge data to json: %v", err)
 				return
 			}
+			if err := gz.Close(); err != nil {
+				logger.Log().Infof("Issue closing gzip: %v", err)
+				return
+			}
 			resp, err := m.Client.R().
 				SetContext(tctx).
-				SetBody(&buf).
+				SetHeader("Content-Encoding", "gzip").
+				SetBody(buf.Bytes()).
 				Post(requestPath)
 
 			if err != nil {
@@ -141,6 +148,7 @@ func (m *agent) send(ctx context.Context) {
 
 		resp, err := m.Client.R().
 			SetContext(tctx).
+			SetHeader("Accept-Encoding", "gzip").
 			SetBody(model.NewCounter("PollCount", &m.Counter)).
 			Post(requestPath)
 

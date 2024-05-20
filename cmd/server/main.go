@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/gzip"
+
 	"github.com/itallix/go-metrics/internal/service"
 
 	"github.com/itallix/go-metrics/internal/logger"
@@ -39,6 +41,8 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerWithZap(logger.Log()))
+	router.Use(gzip.Gzip(gzip.DefaultCompression))
+	router.Use(middleware.GzipDecompress())
 
 	metricService := service.NewMetricService(
 		storage.NewMemStorage[int64](), storage.NewMemStorage[float64]())
