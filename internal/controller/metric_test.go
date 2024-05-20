@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/itallix/go-metrics/internal/service"
+
 	"github.com/itallix/go-metrics/internal/model"
 
 	"github.com/itallix/go-metrics/internal/controller"
@@ -76,8 +78,9 @@ func TestMetricHandler_Update(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	metricController := controller.NewMetricController(
+	metricService := service.NewMetricService(
 		storage.NewMemStorage[int64](), storage.NewMemStorage[float64]())
+	metricController := controller.NewMetricController(metricService)
 
 	router.POST(requestPath, metricController.UpdateMetric)
 
@@ -149,7 +152,8 @@ func TestMetricHandler_Value(t *testing.T) {
 	counters.Update("counter0", 5)
 	gauges := storage.NewMemStorage[float64]()
 	gauges.Set("gauge0", 25.0)
-	metricController := controller.NewMetricController(counters, gauges)
+	metricService := service.NewMetricService(counters, gauges)
+	metricController := controller.NewMetricController(metricService)
 
 	router.POST(requestPath, metricController.GetMetric)
 

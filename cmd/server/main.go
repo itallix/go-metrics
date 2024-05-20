@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/itallix/go-metrics/internal/service"
+
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/middleware"
 
@@ -38,12 +40,16 @@ func main() {
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerWithZap(logger.Log()))
 
-	metricController := controller.NewMetricController(
+	metricService := service.NewMetricService(
 		storage.NewMemStorage[int64](), storage.NewMemStorage[float64]())
+	metricController := controller.NewMetricController(
+		metricService)
 
 	router.GET("/", metricController.ListMetrics)
 	router.POST("/update", metricController.UpdateMetric)
 	router.POST("/value", metricController.GetMetric)
+	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
+	router.GET("/value/:metricType/:metricName", metricController.GetMetricQuery)
 	router.GET("/healthcheck", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
