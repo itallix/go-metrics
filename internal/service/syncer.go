@@ -10,12 +10,8 @@ import (
 	"github.com/itallix/go-metrics/internal/model"
 )
 
-type Saver interface {
-	Save()
-}
-
-type Loader interface {
-	Load()
+type ISyncer interface {
+	Start(restore bool)
 }
 
 type Syncer struct {
@@ -34,46 +30,58 @@ func NewSyncer(ctx context.Context, metricSrv MetricService, interval int, filep
 	}
 }
 
-func (s *Syncer) Save() {
-	if s.filepath != "" {
-		tickerStore := time.NewTicker(time.Duration(s.interval) * time.Second)
-		defer tickerStore.Stop()
+func (s *Syncer) sync() {
+	logger.Log().Infof("Saving metrics to file %s", s.filepath)
+	file, err := os.OpenFile(s.filepath, os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		logger.Log().Errorf("Cannot create or open file: %v", file)
+	}
+	encoder := json.NewEncoder(file)
+	counters := s.metricSrv.GetCounters()
+	gauges := s.metricSrv.GetGauges()
+	var metrics []model.Metrics
+	for k, v := range counters {
+		cv := v
+		c := model.NewCounter(k, &cv)
+		metrics = append(metrics, *c)
+	}
+	for k, v := range gauges {
+		gv := v
+		g := model.NewGauge(k, &gv)
+		metrics = append(metrics, *g)
+	}
+	if err = encoder.Encode(metrics); err != nil {
+		logger.Log().Errorf("Issue encoding metric: %v", err)
+	}
+}
 
-		for {
-			select {
-			case <-tickerStore.C:
-				logger.Log().Infof("Saving metrics to file %s", s.filepath)
-				file, err := os.OpenFile(s.filepath, os.O_WRONLY|os.O_CREATE, 0666)
-				if err != nil {
-					logger.Log().Errorf("Cannot create or open file: %v", file)
+func (s *Syncer) Start(restore bool) {
+	if restore {
+		s.load()
+	}
+	if s.interval == 0 {
+		s.sync()
+		return
+	}
+	if s.filepath != "" {
+		go func() {
+			tickerStore := time.NewTicker(time.Duration(s.interval) * time.Second)
+			defer tickerStore.Stop()
+			for {
+				select {
+				case <-tickerStore.C:
+					s.sync()
+				case <-s.ctx.Done():
+					return
 				}
-				encoder := json.NewEncoder(file)
-				counters := s.metricSrv.GetCounters()
-				gauges := s.metricSrv.GetGauges()
-				var metrics []model.Metrics
-				for k, v := range counters {
-					cv := v
-					c := model.NewCounter(k, &cv)
-					metrics = append(metrics, *c)
-				}
-				for k, v := range gauges {
-					gv := v
-					g := model.NewGauge(k, &gv)
-					metrics = append(metrics, *g)
-				}
-				if err = encoder.Encode(metrics); err != nil {
-					logger.Log().Errorf("Issue encoding metric: %v", err)
-				}
-			case <-s.ctx.Done():
-				return
 			}
-		}
+		}()
 	} else {
 		logger.Log().Info("Filepath is empty, cannot save metrics")
 	}
 }
 
-func (s *Syncer) Load() {
+func (s *Syncer) load() {
 	logger.Log().Infof("Loading metrics from file %s", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_RDONLY, 0666)
 	if err != nil {

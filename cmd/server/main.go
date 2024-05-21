@@ -53,10 +53,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	syncer := service.NewSyncer(ctx, metricService, storeSettings.StoreInterval, storeSettings.FilePath)
-	go syncer.Save()
-	if storeSettings.Restore {
-		syncer.Load()
-	}
+	syncer.Start(storeSettings.Restore)
 
 	router.GET("/", metricController.ListMetrics)
 	router.POST("/update", metricController.UpdateMetric)
