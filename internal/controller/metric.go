@@ -100,7 +100,7 @@ func (mc *MetricController) ListMetrics(c *gin.Context) {
 	c.Header("Content-Type", "text/html")
 	c.Status(http.StatusOK)
 
-	if err := t.Execute(c.Writer, data); err != nil {
+	if err = t.Execute(c.Writer, data); err != nil {
 		c.String(http.StatusInternalServerError, "Error executing template")
 	}
 }

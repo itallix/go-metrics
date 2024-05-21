@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -33,7 +34,7 @@ func main() {
 		}
 	}()
 
-	addr, err := parseFlags()
+	addr, storeSettings, err := parseFlags()
 	if err != nil {
 		logger.Log().Errorf("Can't parse flags: %v", err.Error())
 	}
@@ -44,10 +45,18 @@ func main() {
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GzipDecompress())
 
-	metricService := service.NewMetricService(
-		storage.NewMemStorage[int64](), storage.NewMemStorage[float64]())
-	metricController := controller.NewMetricController(
-		metricService)
+	counters := storage.NewMemStorage[int64]()
+	gauges := storage.NewMemStorage[float64]()
+	metricService := service.NewMetricService(counters, gauges)
+	metricController := controller.NewMetricController(metricService)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	syncer := service.NewSyncer(ctx, metricService, storeSettings.StoreInterval, storeSettings.FilePath)
+	go syncer.Save()
+	if storeSettings.Restore {
+		syncer.Load()
+	}
 
 	router.GET("/", metricController.ListMetrics)
 	router.POST("/update", metricController.UpdateMetric)

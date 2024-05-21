@@ -10,6 +10,7 @@ import (
 type MetricService interface {
 	Update(metric *model.Metrics) error
 	Read(metric *model.Metrics) error
+	Write(metrics []model.Metrics)
 	GetCounters() map[string]int64
 	GetGauges() map[string]float64
 }
@@ -70,6 +71,17 @@ func (s *MetricServiceImpl) Read(metric *model.Metrics) error {
 		return nil
 	default:
 		return errMetricNotFound
+	}
+}
+
+func (s *MetricServiceImpl) Write(metrics []model.Metrics) {
+	for _, m := range metrics {
+		switch m.MType {
+		case model.Counter:
+			s.counters.Set(m.ID, *m.Delta)
+		case model.Gauge:
+			s.gauges.Set(m.ID, *m.Value)
+		}
 	}
 }
 
