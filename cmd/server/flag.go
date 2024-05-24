@@ -31,7 +31,6 @@ func parseFlags() (*mflag.RunAddress, *StoreSettings, error) {
 	addr := mflag.NewRunAddress()
 	_ = flag.Value(addr)
 	flag.Var(addr, "a", "Net address host:port")
-	flag.Parse()
 
 	var (
 		storeInterval int
