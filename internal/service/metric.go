@@ -18,12 +18,14 @@ type MetricService interface {
 type MetricServiceImpl struct {
 	counters storage.Storage[int64]
 	gauges   storage.Storage[float64]
+	syncCh   chan int
 }
 
-func NewMetricService(counters storage.Storage[int64], gauges storage.Storage[float64]) *MetricServiceImpl {
+func NewMetricService(counters storage.Storage[int64], gauges storage.Storage[float64], syncCh chan int) *MetricServiceImpl {
 	return &MetricServiceImpl{
 		counters: counters,
 		gauges:   gauges,
+		syncCh:   syncCh,
 	}
 }
 
@@ -40,17 +42,20 @@ func (s *MetricServiceImpl) Update(metric *model.Metrics) error {
 		}
 		val := s.counters.Update(metric.ID, *metric.Delta)
 		metric.Delta = &val
-		return nil
+
 	case model.Gauge:
 		if metric.Value == nil {
 			return errMetricNotSupported
 		}
 		val := s.gauges.Set(metric.ID, *metric.Value)
 		metric.Value = &val
-		return nil
 	default:
 		return errMetricNotFound
 	}
+	if s.syncCh != nil {
+		s.syncCh <- 1
+	}
+	return nil
 }
 
 func (s *MetricServiceImpl) Read(metric *model.Metrics) error {

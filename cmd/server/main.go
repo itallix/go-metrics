@@ -47,12 +47,18 @@ func main() {
 
 	counters := storage.NewMemStorage[int64]()
 	gauges := storage.NewMemStorage[float64]()
-	metricService := service.NewMetricService(counters, gauges)
+
+	var syncCh chan int
+	if storeSettings.StoreInterval == 0 {
+		syncCh = make(chan int)
+		defer close(syncCh)
+	}
+	metricService := service.NewMetricService(counters, gauges, syncCh)
 	metricController := controller.NewMetricController(metricService)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	syncer := service.NewSyncer(ctx, metricService, storeSettings.StoreInterval, storeSettings.FilePath)
+	syncer := service.NewSyncer(ctx, metricService, storeSettings.StoreInterval, storeSettings.FilePath, syncCh)
 	syncer.Start(storeSettings.Restore)
 
 	router.GET("/", metricController.ListMetrics)

@@ -19,22 +19,24 @@ type Syncer struct {
 	interval  int
 	filepath  string
 	ctx       context.Context
+	syncCh    chan int
 }
 
-func NewSyncer(ctx context.Context, metricSrv MetricService, interval int, filepath string) *Syncer {
+func NewSyncer(ctx context.Context, metricSrv MetricService, interval int, filepath string, syncCh chan int) *Syncer {
 	return &Syncer{
 		ctx:       ctx,
 		metricSrv: metricSrv,
 		interval:  interval,
 		filepath:  filepath,
+		syncCh:    syncCh,
 	}
 }
 
-func (s *Syncer) sync() {
+func (s *Syncer) sync() error {
 	logger.Log().Infof("Saving metrics to file %s", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
-		logger.Log().Errorf("Cannot create or open file: %v", file)
+		return err
 	}
 	encoder := json.NewEncoder(file)
 	counters := s.metricSrv.GetCounters()
@@ -51,26 +53,35 @@ func (s *Syncer) sync() {
 		metrics = append(metrics, *g)
 	}
 	if err = encoder.Encode(metrics); err != nil {
-		logger.Log().Errorf("Issue encoding metric: %v", err)
+		return err
 	}
+	return nil
 }
 
 func (s *Syncer) Start(restore bool) {
 	if restore {
-		s.load()
+		if err := s.load(); err != nil {
+			logger.Log().Errorf("Error loading metrics from file: %v", err)
+		}
 	}
 	if s.interval == 0 {
-		s.sync()
-		return
-	}
-	if s.filepath != "" {
+		go func() {
+			for range s.syncCh {
+				if err := s.sync(); err != nil {
+					logger.Log().Errorf("Error syncing to the file: %v", err)
+				}
+			}
+		}()
+	} else if s.filepath != "" {
 		go func() {
 			tickerStore := time.NewTicker(time.Duration(s.interval) * time.Second)
 			defer tickerStore.Stop()
 			for {
 				select {
 				case <-tickerStore.C:
-					s.sync()
+					if err := s.sync(); err != nil {
+						logger.Log().Errorf("Error syncing to the file: %v", err)
+					}
 				case <-s.ctx.Done():
 					return
 				}
@@ -81,16 +92,17 @@ func (s *Syncer) Start(restore bool) {
 	}
 }
 
-func (s *Syncer) load() {
+func (s *Syncer) load() error {
 	logger.Log().Infof("Loading metrics from file %s", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_RDONLY, 0666)
 	if err != nil {
-		logger.Log().Errorf("Cannot open file: %v", file)
+		return err
 	}
 	decoder := json.NewDecoder(file)
 	var metrics []model.Metrics
 	if err = decoder.Decode(&metrics); err != nil {
-		logger.Log().Infof("Issue decoding metrics: %v", err)
+		return err
 	}
 	s.metricSrv.Write(metrics)
+	return nil
 }
