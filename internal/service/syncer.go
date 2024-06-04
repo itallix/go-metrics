@@ -10,21 +10,19 @@ import (
 	"github.com/itallix/go-metrics/internal/model"
 )
 
-type ISyncer interface {
-	Start(restore bool)
+type Syncer interface {
+	Start(ctx context.Context, restore bool)
 }
 
-type Syncer struct {
+type SyncerImpl struct {
 	metricSrv MetricService
 	interval  int
 	filepath  string
-	ctx       context.Context
 	syncCh    chan int
 }
 
-func NewSyncer(ctx context.Context, metricSrv MetricService, interval int, filepath string, syncCh chan int) *Syncer {
-	return &Syncer{
-		ctx:       ctx,
+func NewSyncerImpl(metricSrv MetricService, interval int, filepath string, syncCh chan int) *SyncerImpl {
+	return &SyncerImpl{
 		metricSrv: metricSrv,
 		interval:  interval,
 		filepath:  filepath,
@@ -32,7 +30,7 @@ func NewSyncer(ctx context.Context, metricSrv MetricService, interval int, filep
 	}
 }
 
-func (s *Syncer) sync() error {
+func (s *SyncerImpl) sync() error {
 	logger.Log().Infof("Saving metrics to file %s", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -58,7 +56,7 @@ func (s *Syncer) sync() error {
 	return nil
 }
 
-func (s *Syncer) Start(restore bool) {
+func (s *SyncerImpl) Start(ctx context.Context, restore bool) {
 	if restore {
 		if err := s.load(); err != nil {
 			logger.Log().Errorf("Error loading metrics from file: %v", err)
@@ -72,7 +70,7 @@ func (s *Syncer) Start(restore bool) {
 				}
 			}
 		}()
-	} else if s.filepath != "" {
+	} else {
 		go func() {
 			tickerStore := time.NewTicker(time.Duration(s.interval) * time.Second)
 			defer tickerStore.Stop()
@@ -82,17 +80,15 @@ func (s *Syncer) Start(restore bool) {
 					if err := s.sync(); err != nil {
 						logger.Log().Errorf("Error syncing to the file: %v", err)
 					}
-				case <-s.ctx.Done():
+				case <-ctx.Done():
 					return
 				}
 			}
 		}()
-	} else {
-		logger.Log().Info("Filepath is empty, cannot save metrics")
 	}
 }
 
-func (s *Syncer) load() error {
+func (s *SyncerImpl) load() error {
 	logger.Log().Infof("Loading metrics from file %s", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_RDONLY, 0666)
 	if err != nil {

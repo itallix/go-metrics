@@ -21,7 +21,7 @@ type MetricServiceImpl struct {
 	syncCh   chan int
 }
 
-func NewMetricService(counters storage.Storage[int64], gauges storage.Storage[float64], syncCh chan int) *MetricServiceImpl {
+func NewMetricServiceImpl(counters storage.Storage[int64], gauges storage.Storage[float64], syncCh chan int) *MetricServiceImpl {
 	return &MetricServiceImpl{
 		counters: counters,
 		gauges:   gauges,

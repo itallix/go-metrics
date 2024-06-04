@@ -49,17 +49,22 @@ func main() {
 	gauges := storage.NewMemStorage[float64]()
 
 	var syncCh chan int
-	if storeSettings.StoreInterval == 0 {
+	if storeSettings.FilePath == "" {
+		logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
+	}
+	if storeSettings.StoreInterval == 0 && storeSettings.FilePath != "" {
 		syncCh = make(chan int)
 		defer close(syncCh)
 	}
-	metricService := service.NewMetricService(counters, gauges, syncCh)
+	metricService := service.NewMetricServiceImpl(counters, gauges, syncCh)
 	metricController := controller.NewMetricController(metricService)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	syncer := service.NewSyncer(ctx, metricService, storeSettings.StoreInterval, storeSettings.FilePath, syncCh)
-	syncer.Start(storeSettings.Restore)
+	if storeSettings.FilePath != "" {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		syncer := service.NewSyncerImpl(metricService, storeSettings.StoreInterval, storeSettings.FilePath, syncCh)
+		syncer.Start(ctx, storeSettings.Restore)
+	}
 
 	router.GET("/", metricController.ListMetrics)
 	router.POST("/update", metricController.UpdateMetric)

@@ -78,7 +78,7 @@ func TestMetricHandler_Update(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	metricService := service.NewMetricService(
+	metricService := service.NewMetricServiceImpl(
 		storage.NewMemStorage[int64](), storage.NewMemStorage[float64](), nil)
 	metricController := controller.NewMetricController(metricService)
 
@@ -152,7 +152,7 @@ func TestMetricHandler_Value(t *testing.T) {
 	counters.Update("counter0", 5)
 	gauges := storage.NewMemStorage[float64]()
 	gauges.Set("gauge0", 25.0)
-	metricService := service.NewMetricService(counters, gauges, nil)
+	metricService := service.NewMetricServiceImpl(counters, gauges, nil)
 	metricController := controller.NewMetricController(metricService)
 
 	router.POST(requestPath, metricController.GetMetric)
