@@ -1,4 +1,4 @@
-package service
+package sync
 
 import (
 	"context"
@@ -8,63 +8,44 @@ import (
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
+	"github.com/itallix/go-metrics/internal/service"
 )
 
-type Syncer interface {
-	Start(ctx context.Context, restore bool)
-}
-
-type SyncerImpl struct {
-	metricSrv MetricService
-	interval  int
+type FileSyncer struct {
 	filepath  string
-	syncCh    chan int
+	metricSrv service.MetricService
 }
 
-func NewSyncerImpl(metricSrv MetricService, interval int, filepath string, syncCh chan int) *SyncerImpl {
-	return &SyncerImpl{
-		metricSrv: metricSrv,
-		interval:  interval,
+func NewFileSyncer(metricSrv service.MetricService, filepath string) *FileSyncer {
+	return &FileSyncer{
 		filepath:  filepath,
-		syncCh:    syncCh,
+		metricSrv: metricSrv,
 	}
 }
 
-func (s *SyncerImpl) sync() error {
+func (s *FileSyncer) sync() error {
 	logger.Log().Infof("Saving metrics to file %s", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
 	encoder := json.NewEncoder(file)
-	counters := s.metricSrv.GetCounters()
-	gauges := s.metricSrv.GetGauges()
-	var metrics []model.Metrics
-	for k, v := range counters {
-		cv := v
-		c := model.NewCounter(k, &cv)
-		metrics = append(metrics, *c)
-	}
-	for k, v := range gauges {
-		gv := v
-		g := model.NewGauge(k, &gv)
-		metrics = append(metrics, *g)
-	}
+	metrics := s.metricSrv.GetMetrics()
 	if err = encoder.Encode(metrics); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *SyncerImpl) Start(ctx context.Context, restore bool) {
-	if restore {
+func (s *FileSyncer) Start(ctx context.Context, cfg *Config) {
+	if cfg.restore {
 		if err := s.load(); err != nil {
 			logger.Log().Errorf("Error loading metrics from file: %v", err)
 		}
 	}
-	if s.interval == 0 {
+	if cfg.interval == 0 {
 		go func() {
-			for range s.syncCh {
+			for range cfg.syncCh {
 				if err := s.sync(); err != nil {
 					logger.Log().Errorf("Error syncing to the file: %v", err)
 				}
@@ -72,7 +53,7 @@ func (s *SyncerImpl) Start(ctx context.Context, restore bool) {
 		}()
 	} else {
 		go func() {
-			tickerStore := time.NewTicker(time.Duration(s.interval) * time.Second)
+			tickerStore := time.NewTicker(time.Duration(cfg.interval) * time.Second)
 			defer tickerStore.Stop()
 			for {
 				select {
@@ -88,8 +69,8 @@ func (s *SyncerImpl) Start(ctx context.Context, restore bool) {
 	}
 }
 
-func (s *SyncerImpl) load() error {
-	logger.Log().Infof("Loading metrics from file %s", s.filepath)
+func (s *FileSyncer) load() error {
+	logger.Log().Infof("Loading metrics from file %s...", s.filepath)
 	file, err := os.OpenFile(s.filepath, os.O_RDONLY, 0666)
 	if err != nil {
 		return err
@@ -100,5 +81,6 @@ func (s *SyncerImpl) load() error {
 		return err
 	}
 	s.metricSrv.Write(metrics)
+	logger.Log().Infof("Metrics has been successfully loaded from file %s.", s.filepath)
 	return nil
 }

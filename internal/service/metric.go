@@ -13,6 +13,7 @@ type MetricService interface {
 	Write(metrics []model.Metrics)
 	GetCounters() map[string]int64
 	GetGauges() map[string]float64
+	GetMetrics() []model.Metrics
 }
 
 type MetricServiceImpl struct {
@@ -21,7 +22,8 @@ type MetricServiceImpl struct {
 	syncCh   chan int
 }
 
-func NewMetricServiceImpl(counters storage.Storage[int64], gauges storage.Storage[float64], syncCh chan int) *MetricServiceImpl {
+func NewMetricServiceImpl(counters storage.Storage[int64], gauges storage.Storage[float64],
+	syncCh chan int) *MetricServiceImpl {
 	return &MetricServiceImpl{
 		counters: counters,
 		gauges:   gauges,
@@ -96,4 +98,19 @@ func (s *MetricServiceImpl) GetCounters() map[string]int64 {
 
 func (s *MetricServiceImpl) GetGauges() map[string]float64 {
 	return s.gauges.Copy()
+}
+
+func (s *MetricServiceImpl) GetMetrics() []model.Metrics {
+	var metrics []model.Metrics
+	for k, v := range s.GetCounters() {
+		cv := v
+		c := model.NewCounter(k, &cv)
+		metrics = append(metrics, *c)
+	}
+	for k, v := range s.GetGauges() {
+		gv := v
+		g := model.NewGauge(k, &gv)
+		metrics = append(metrics, *g)
+	}
+	return metrics
 }

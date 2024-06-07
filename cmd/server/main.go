@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/itallix/go-metrics/internal/service/sync"
 	"log"
 	"net/http"
 	"time"
@@ -60,25 +61,29 @@ func main() {
 	}
 	metricService := service.NewMetricServiceImpl(counters, gauges, syncCh)
 	metricController := controller.NewMetricController(metricService)
-	mainCtx := context.Background()
+	ctx := context.Background()
 
-	if serverConfig.FilePath != "" {
-		ctx, cancel := context.WithCancel(mainCtx)
-		defer cancel()
-		syncer := service.NewSyncerImpl(metricService, serverConfig.StoreInterval, serverConfig.FilePath, syncCh)
-		syncer.Start(ctx, serverConfig.Restore)
-	}
-
-	var db *storage.DB
+	var (
+		db     storage.DB
+		syncer sync.Syncer
+	)
 	if serverConfig.DatabaseDSN != "" {
-		db, err = storage.NewDB(mainCtx, serverConfig.DatabaseDSN)
-		if err != nil {
-			logger.Log().Fatalf("Cannot connect to DB: %v", err)
-		} else {
-			defer func() {
-				_ = db.Close()
-			}()
+		if serverConfig.DatabaseDSN != "" {
+			db, err = storage.NewPgxDB(ctx, serverConfig.DatabaseDSN)
+			if err != nil {
+				logger.Log().Fatalf("Cannot connect to DB: %v", err)
+			} else {
+				defer func() {
+					_ = db.Close()
+				}()
+			}
 		}
+		syncer = sync.NewDbSyncer(metricService, db)
+	} else if serverConfig.FilePath != "" {
+		syncer = sync.NewFileSyncer(metricService, serverConfig.FilePath)
+	}
+	if syncer != nil {
+		syncer.Start(ctx, sync.NewConfig(serverConfig.StoreInterval, serverConfig.Restore, syncCh))
 	}
 
 	router.GET("/", metricController.ListMetrics)
@@ -91,7 +96,7 @@ func main() {
 	})
 	router.GET("/ping", func(c *gin.Context) {
 		if db != nil {
-			if err = db.Ping(mainCtx); err != nil {
+			if err = db.Ping(ctx); err != nil {
 				_ = c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
