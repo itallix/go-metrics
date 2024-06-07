@@ -34,6 +34,7 @@ func (s *FileSyncer) sync() error {
 	if err = encoder.Encode(metrics); err != nil {
 		return err
 	}
+	logger.Log().Info("Metrics has been successfully saved.")
 	return nil
 }
 

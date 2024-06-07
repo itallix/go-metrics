@@ -8,7 +8,8 @@ import (
 )
 
 type MetricService interface {
-	Update(metric *model.Metrics) error
+	UpdateOne(metric *model.Metrics) error
+	UpdateBatch(metrics []model.Metrics) error
 	Read(metric *model.Metrics) error
 	Write(metrics []model.Metrics)
 	GetCounters() map[string]int64
@@ -36,7 +37,7 @@ var (
 	errMetricNotFound     = errors.New("metric is not found")
 )
 
-func (s *MetricServiceImpl) Update(metric *model.Metrics) error {
+func (s *MetricServiceImpl) UpdateOne(metric *model.Metrics) error {
 	switch metric.MType {
 	case model.Counter:
 		if metric.Delta == nil {
@@ -53,6 +54,32 @@ func (s *MetricServiceImpl) Update(metric *model.Metrics) error {
 		metric.Value = &val
 	default:
 		return errMetricNotFound
+	}
+	if s.syncCh != nil {
+		s.syncCh <- 1
+	}
+	return nil
+}
+
+func (s *MetricServiceImpl) UpdateBatch(metrics []model.Metrics) error {
+	for _, metric := range metrics {
+		switch metric.MType {
+		case model.Counter:
+			if metric.Delta == nil {
+				return errMetricNotSupported
+			}
+			val := s.counters.Update(metric.ID, *metric.Delta)
+			metric.Delta = &val
+
+		case model.Gauge:
+			if metric.Value == nil {
+				return errMetricNotSupported
+			}
+			val := s.gauges.Set(metric.ID, *metric.Value)
+			metric.Value = &val
+		default:
+			return errMetricNotFound
+		}
 	}
 	if s.syncCh != nil {
 		s.syncCh <- 1

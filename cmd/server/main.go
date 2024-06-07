@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/itallix/go-metrics/internal/service/sync"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/itallix/go-metrics/internal/service/sync"
 
 	"github.com/gin-contrib/gzip"
 	_ "github.com/jackc/pgx"
@@ -87,7 +88,8 @@ func main() {
 	}
 
 	router.GET("/", metricController.ListMetrics)
-	router.POST("/update", metricController.UpdateMetric)
+	router.POST("/update", metricController.UpdateOne)
+	router.POST("/updates", metricController.UpdateBatch)
 	router.POST("/value", metricController.GetMetric)
 	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
 	router.GET("/value/:metricType/:metricName", metricController.GetMetricQuery)

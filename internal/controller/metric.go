@@ -28,7 +28,27 @@ func NewMetricController(service service.MetricService) *MetricController {
 	}
 }
 
-func (mc *MetricController) UpdateMetric(c *gin.Context) {
+func (mc *MetricController) UpdateBatch(c *gin.Context) {
+	var batch []model.Metrics
+	if err := c.BindJSON(&batch); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "error decoding metric payload",
+		})
+		return
+	}
+
+	if err := mc.metricSrv.UpdateBatch(batch); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	logger.Log().Info("Updating metrics batch completed.")
+	c.JSON(http.StatusOK, batch)
+}
+
+func (mc *MetricController) UpdateOne(c *gin.Context) {
 	var metric model.Metrics
 	if err := c.BindJSON(&metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -36,7 +56,7 @@ func (mc *MetricController) UpdateMetric(c *gin.Context) {
 		})
 		return
 	}
-	if err := mc.metricSrv.Update(&metric); err != nil {
+	if err := mc.metricSrv.UpdateOne(&metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
@@ -148,7 +168,7 @@ func (mc *MetricController) UpdateMetricQuery(c *gin.Context) {
 		return
 	}
 
-	if err := mc.metricSrv.Update(metric); err != nil {
+	if err := mc.metricSrv.UpdateOne(metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})

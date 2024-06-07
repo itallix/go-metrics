@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMetricHandler_Update(t *testing.T) {
+func TestMetricHandler_UpdateOne(t *testing.T) {
 	const requestPath = "/update"
 	var (
 		floatValue = 123.0
@@ -82,7 +82,57 @@ func TestMetricHandler_Update(t *testing.T) {
 		storage.NewMemStorage[int64](), storage.NewMemStorage[float64](), nil)
 	metricController := controller.NewMetricController(metricService)
 
-	router.POST(requestPath, metricController.UpdateMetric)
+	router.POST(requestPath, metricController.UpdateOne)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			encoder := json.NewEncoder(&buf)
+			if err := encoder.Encode(&tt.givePayload); err != nil {
+				t.Fatalf("Issue encoding payload to json: %v", err)
+				return
+			}
+			req := httptest.NewRequest(http.MethodPost, requestPath, &buf)
+			req.Header.Set("Content-Type", "application/json")
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
+			assert.JSONEq(t, tt.wantJSON, resp.Body.String(), "handler returned wrong message")
+		})
+	}
+}
+
+func TestMetricHandler_UpdateBatch(t *testing.T) {
+	const requestPath = "/updates"
+	var (
+		floatValue = 123.0
+		intValue   = int64(123)
+	)
+
+	tests := []struct {
+		name        string
+		givePayload []model.Metrics
+		wantStatus  int
+		wantJSON    string
+	}{
+		{
+			name: "CanUpdateBatch",
+			givePayload: []model.Metrics{
+				*model.NewGauge("someGauge", &floatValue),
+				*model.NewCounter("someCounter", &intValue),
+			},
+			wantStatus: http.StatusOK,
+			wantJSON:   `[{"id": "someGauge", "type": "gauge", "value": 123.0}, {"id":"someCounter", "type":"counter", "delta":123}]`,
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	metricService := service.NewMetricServiceImpl(
+		storage.NewMemStorage[int64](), storage.NewMemStorage[float64](), nil)
+	metricController := controller.NewMetricController(metricService)
+
+	router.POST(requestPath, metricController.UpdateBatch)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
