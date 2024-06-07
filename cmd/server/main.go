@@ -78,7 +78,7 @@ func main() {
 				}()
 			}
 		}
-		syncer = sync.NewDbSyncer(metricService, db)
+		syncer = sync.NewDBSyncer(metricService, db)
 	} else if serverConfig.FilePath != "" {
 		syncer = sync.NewFileSyncer(metricService, serverConfig.FilePath)
 	}
