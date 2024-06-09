@@ -1,9 +1,15 @@
 package controller_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/itallix/go-metrics/internal/service"
+
+	"github.com/itallix/go-metrics/internal/model"
 
 	"github.com/itallix/go-metrics/internal/controller"
 
@@ -14,64 +20,157 @@ import (
 )
 
 func TestMetricHandler_Update(t *testing.T) {
+	const requestPath = "/update"
+	var (
+		floatValue = 123.0
+		intValue   = int64(123)
+	)
+
 	tests := []struct {
 		name        string
-		givePath    string
-		giveMethod  string
+		givePayload *model.Metrics
 		wantStatus  int
-		wantMessage string
+		wantJSON    string
 	}{
 		{
-			name:        "MetricDoesntExist",
-			givePath:    "/update/histogram/someMetric/123.0",
-			giveMethod:  http.MethodPost,
-			wantStatus:  http.StatusBadRequest,
-			wantMessage: `{"error": "metric is not found"}`,
+			name: "MetricDoesntExist",
+			givePayload: &model.Metrics{
+				ID:    "someMetric",
+				MType: "hist",
+				Value: &floatValue,
+			},
+			wantStatus: http.StatusBadRequest,
+			wantJSON:   `{"error": "metric is not found"}`,
 		},
 		{
-			name:        "CounterMetricTypeIsNotSupported",
-			givePath:    "/update/counter/someMetric/123.0",
-			giveMethod:  http.MethodPost,
-			wantStatus:  http.StatusBadRequest,
-			wantMessage: `{"error": "metric type is not supported"}`,
+			name: "CounterMetricTypeIsNotSupported",
+			givePayload: &model.Metrics{
+				ID:    "someCounter",
+				MType: model.Counter,
+				Value: &floatValue,
+			},
+			wantStatus: http.StatusBadRequest,
+			wantJSON:   `{"error": "metric type is not supported"}`,
 		},
 		{
-			name:        "GaugeMetricTypeIsNotSupported",
-			givePath:    "/update/gauge/someMetric/abc",
-			giveMethod:  http.MethodPost,
-			wantStatus:  http.StatusBadRequest,
-			wantMessage: `{"error": "metric type is not supported"}`,
+			name: "GaugeMetricTypeIsNotSupported",
+			givePayload: &model.Metrics{
+				ID:    "someGauge",
+				MType: model.Gauge,
+				Delta: &intValue,
+			},
+			wantStatus: http.StatusBadRequest,
+			wantJSON:   `{"error": "metric type is not supported"}`,
 		},
 		{
 			name:        "CanUpdateCounter",
-			givePath:    "/update/counter/someMetric/123",
-			giveMethod:  http.MethodPost,
+			givePayload: model.NewCounter("someCounter", &intValue),
 			wantStatus:  http.StatusOK,
-			wantMessage: `{"message": "OK"}`,
+			wantJSON:    `{"id": "someCounter", "type": "counter", "delta": 123}`,
 		},
 		{
 			name:        "CanUpdateGauge",
-			givePath:    "/update/gauge/someMetric/123.0",
-			giveMethod:  http.MethodPost,
+			givePayload: model.NewGauge("someGauge", &floatValue),
 			wantStatus:  http.StatusOK,
-			wantMessage: `{"message": "OK"}`,
+			wantJSON:    `{"id": "someGauge", "type": "gauge", "value": 123.0}`,
 		},
 	}
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	metricController := controller.NewMetricController(
-		storage.NewMemStorage[int](), storage.NewMemStorage[float64]()) // FIXME: introduce mock
+	metricService := service.NewMetricServiceImpl(
+		storage.NewMemStorage[int64](), storage.NewMemStorage[float64](), nil)
+	metricController := controller.NewMetricController(metricService)
 
-	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetric)
+	router.POST(requestPath, metricController.UpdateMetric)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.giveMethod, tt.givePath, nil)
+			var buf bytes.Buffer
+			encoder := json.NewEncoder(&buf)
+			if err := encoder.Encode(&tt.givePayload); err != nil {
+				t.Fatalf("Issue encoding payload to json: %v", err)
+				return
+			}
+			req := httptest.NewRequest(http.MethodPost, requestPath, &buf)
+			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
 			router.ServeHTTP(resp, req)
 			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
-			assert.JSONEq(t, tt.wantMessage, resp.Body.String(), "handler returned wrong message")
+			assert.JSONEq(t, tt.wantJSON, resp.Body.String(), "handler returned wrong message")
+		})
+	}
+}
+
+func TestMetricHandler_Value(t *testing.T) {
+	const requestPath = "/value"
+	tests := []struct {
+		name        string
+		givePayload *model.Metrics
+		wantStatus  int
+		wantJSON    string
+	}{
+		{
+			name: "MetricNotFound",
+			givePayload: &model.Metrics{
+				ID:    "someMetric",
+				MType: "hist",
+			},
+			wantStatus: http.StatusNotFound,
+			wantJSON:   `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "CounterNotFound",
+			givePayload: model.NewCounter("counter1", nil),
+			wantStatus:  http.StatusNotFound,
+			wantJSON:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "GaugeNotFound",
+			givePayload: model.NewGauge("gauge1", nil),
+			wantStatus:  http.StatusNotFound,
+			wantJSON:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "CanGetCounter",
+			givePayload: model.NewCounter("counter0", nil),
+			wantStatus:  http.StatusOK,
+			wantJSON:    `{"id": "counter0", "type": "counter", "delta": 10}`,
+		},
+		{
+			name:        "CanGetGauge",
+			givePayload: model.NewGauge("gauge0", nil),
+			wantStatus:  http.StatusOK,
+			wantJSON:    `{"id": "gauge0", "type": "gauge", "value": 25.0}`,
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	counters := storage.NewMemStorage[int64]()
+	counters.Update("counter0", 5)
+	counters.Update("counter0", 5)
+	gauges := storage.NewMemStorage[float64]()
+	gauges.Set("gauge0", 25.0)
+	metricService := service.NewMetricServiceImpl(counters, gauges, nil)
+	metricController := controller.NewMetricController(metricService)
+
+	router.POST(requestPath, metricController.GetMetric)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			encoder := json.NewEncoder(&buf)
+			if err := encoder.Encode(&tt.givePayload); err != nil {
+				t.Fatalf("Issue encoding payload to json: %v", err)
+				return
+			}
+			req := httptest.NewRequest(http.MethodPost, requestPath, &buf)
+			req.Header.Set("Content-Type", "application/json")
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
+			assert.JSONEq(t, tt.wantJSON, resp.Body.String(), "handler returned wrong message")
 		})
 	}
 }

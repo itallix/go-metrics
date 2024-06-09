@@ -1,16 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/gzip"
+
+	"github.com/itallix/go-metrics/internal/service"
+
+	"github.com/itallix/go-metrics/internal/logger"
+	"github.com/itallix/go-metrics/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 	"github.com/itallix/go-metrics/internal/controller"
 	"github.com/itallix/go-metrics/internal/storage"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -20,30 +25,52 @@ const (
 )
 
 func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
+	if err := logger.Initialize("debug"); err != nil {
 		log.Fatalf("Cannot instantiate zap logger: %s", err)
 	}
 	defer func() {
-		if deferErr := logger.Sync(); deferErr != nil {
-			logger.Error("Failed to sync logger", zap.Error(deferErr))
+		if deferErr := logger.Log().Sync(); deferErr != nil {
+			logger.Log().Errorf("Failed to sync logger: %s", deferErr)
 		}
 	}()
 
-	addr, err := parseFlags()
+	addr, storeSettings, err := parseFlags()
 	if err != nil {
-		logger.Fatal(err.Error())
+		logger.Log().Errorf("Can't parse flags: %v", err.Error())
 	}
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.LoggerWithZap(logger.Log()))
+	router.Use(gzip.Gzip(gzip.DefaultCompression))
+	router.Use(middleware.GzipDecompress())
 
-	metricController := controller.NewMetricController(
-		storage.NewMemStorage[int](), storage.NewMemStorage[float64]())
+	counters := storage.NewMemStorage[int64]()
+	gauges := storage.NewMemStorage[float64]()
+
+	var syncCh chan int
+	if storeSettings.FilePath == "" {
+		logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
+	}
+	if storeSettings.StoreInterval == 0 && storeSettings.FilePath != "" {
+		syncCh = make(chan int)
+		defer close(syncCh)
+	}
+	metricService := service.NewMetricServiceImpl(counters, gauges, syncCh)
+	metricController := controller.NewMetricController(metricService)
+
+	if storeSettings.FilePath != "" {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		syncer := service.NewSyncerImpl(metricService, storeSettings.StoreInterval, storeSettings.FilePath, syncCh)
+		syncer.Start(ctx, storeSettings.Restore)
+	}
 
 	router.GET("/", metricController.ListMetrics)
-	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetric)
-	router.GET("/value/:metricType/:metricName", metricController.GetMetric)
+	router.POST("/update", metricController.UpdateMetric)
+	router.POST("/value", metricController.GetMetric)
+	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
+	router.GET("/value/:metricType/:metricName", metricController.GetMetricQuery)
 	router.GET("/healthcheck", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -56,8 +83,8 @@ func main() {
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
 
-	logger.Info(fmt.Sprintf("Server is starting on %v...", addr))
+	logger.Log().Infof("Server is starting on %s...", addr)
 	if err = server.ListenAndServe(); err != nil {
-		logger.Fatal("Error starting server", zap.Error(err))
+		logger.Log().Fatalf("Error starting server: %v", err)
 	}
 }

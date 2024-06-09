@@ -2,12 +2,16 @@ package controller
 
 import (
 	"fmt"
-	"log"
+	"html/template"
 	"net/http"
 	"strconv"
 
+	"github.com/itallix/go-metrics/internal/service"
+
+	"github.com/itallix/go-metrics/internal/logger"
+	"github.com/itallix/go-metrics/internal/model"
+
 	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/internal/storage"
 )
 
 type Result struct {
@@ -15,40 +19,128 @@ type Result struct {
 }
 
 type MetricController struct {
-	counters storage.Storage[int]
-	gauges   storage.Storage[float64]
+	metricSrv service.MetricService
 }
 
-func NewMetricController(counters storage.Storage[int], gauges storage.Storage[float64]) *MetricController {
+func NewMetricController(service service.MetricService) *MetricController {
 	return &MetricController{
-		counters: counters,
-		gauges:   gauges,
+		metricSrv: service,
 	}
 }
 
 func (mc *MetricController) UpdateMetric(c *gin.Context) {
-	metricType := c.Param("metricType")
-	metricName := c.Param("metricName")
-	metricValue := c.Param("metricValue")
-	switch metricType {
-	case "counter":
-		metricValue, err := strconv.ParseInt(metricValue, 10, 32)
+	var metric model.Metrics
+	if err := c.BindJSON(&metric); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "error decoding metric payload",
+		})
+		return
+	}
+	if err := mc.metricSrv.Update(&metric); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	logger.Log().Infof("Updating metric %s of type %s", metric.ID, metric.MType)
+	c.JSON(http.StatusOK, metric)
+}
+
+func (mc *MetricController) GetMetric(c *gin.Context) {
+	var metric model.Metrics
+	if err := c.BindJSON(&metric); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "error decoding metric payload",
+		})
+		return
+	}
+
+	if err := mc.metricSrv.Read(&metric); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "metric is not found",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, metric)
+}
+
+func (mc *MetricController) ListMetrics(c *gin.Context) {
+	const tpl = `
+<html>
+<head>
+	<title>Metrics</title>
+</head>
+<body>
+	<ul>
+		{{- range $key, $value := .Counters }}
+		<li>{{ $key }}: {{ $value }}</li>
+		{{- end }}
+		{{- range $key, $value := .Gauges }}
+		<li>{{ $key }}: {{ $value }}</li>
+		{{- end }}
+	</ul>
+</body>
+</html>`
+
+	t, err := template.New("webpage").Parse(tpl)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Error rendering template")
+		return
+	}
+
+	data := struct {
+		Counters map[string]int64
+		Gauges   map[string]float64
+	}{
+		Counters: mc.metricSrv.GetCounters(),
+		Gauges:   mc.metricSrv.GetGauges(),
+	}
+
+	c.Header("Content-Type", "text/html")
+	c.Status(http.StatusOK)
+
+	if err = t.Execute(c.Writer, data); err != nil {
+		c.String(http.StatusInternalServerError, "Error executing template")
+	}
+}
+
+type MetricQuery struct {
+	Type  model.MetricType `uri:"metricType,required"`
+	ID    string           `uri:"metricName,required"`
+	Value string           `uri:"metricValue,required"`
+}
+
+func (mc *MetricController) UpdateMetricQuery(c *gin.Context) {
+	var query MetricQuery
+	if err := c.ShouldBindUri(&query); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "metric is not supported",
+		})
+		return
+	}
+
+	var metric *model.Metrics
+
+	switch query.Type {
+	case model.Counter:
+		metricValue, err := strconv.ParseInt(query.Value, 10, 32)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"error": "metric type is not supported",
 			})
 			return
 		}
-		mc.counters.Update(metricName, int(metricValue))
-	case "gauge":
-		metricValue, err := strconv.ParseFloat(metricValue, 64)
+		metric = model.NewCounter(query.ID, &metricValue)
+	case model.Gauge:
+		metricValue, err := strconv.ParseFloat(query.Value, 64)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"error": "metric type is not supported",
 			})
 			return
 		}
-		mc.gauges.Set(metricName, metricValue)
+		metric = model.NewGauge(query.ID, &metricValue)
 	default:
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "metric is not found",
@@ -56,55 +148,48 @@ func (mc *MetricController) UpdateMetric(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Updating metric '%s' of type '%s' with value '%s'\n", metricName, metricType, metricValue)
+	if err := mc.metricSrv.Update(metric); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+	logger.Log().Infof("Updating metric '%s' of type '%s' with value '%s'", query.ID, query.Type, query.Value)
 
-	c.Header("Content-Type", "application/json")
 	c.JSON(http.StatusOK, Result{
 		Message: "OK",
 	})
 }
 
-func (mc *MetricController) GetMetric(c *gin.Context) {
-	metricType := c.Param("metricType")
-	metricName := c.Param("metricName")
+func (mc *MetricController) GetMetricQuery(c *gin.Context) {
+	var query MetricQuery
+	if err := c.BindUri(&query); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "metric is not supported",
+		})
+		return
+	}
 
-	switch metricType {
-	case "counter":
-		val, ok := mc.counters.Get(metricName)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "metric is not found",
-			})
-			return
-		}
-		c.String(http.StatusOK, strconv.Itoa(val))
-	case "gauge":
-		val, ok := mc.gauges.Get(metricName)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-				"error": "metric is not found",
-			})
-			return
-		}
-		c.String(http.StatusOK, fmt.Sprintf("%g", val))
+	var metric = &model.Metrics{
+		ID:    query.ID,
+		MType: query.Type,
+	}
+
+	if err := mc.metricSrv.Read(metric); err != nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+			"error": "metric is not found",
+		})
+		return
+	}
+
+	switch query.Type {
+	case model.Counter:
+		c.String(http.StatusOK, strconv.FormatInt(*metric.Delta, 10))
+	case model.Gauge:
+		c.String(http.StatusOK, fmt.Sprintf("%g", *metric.Value))
 	default:
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "metric is not found",
 		})
 	}
-}
-
-func (mc *MetricController) ListMetrics(c *gin.Context) {
-	_, _ = c.Writer.WriteString(fmt.Sprintln("<html><head><title>Metrics</title></head><body><ul>"))
-
-	for k, v := range mc.counters.Copy() {
-		_, _ = c.Writer.WriteString(fmt.Sprintf("<li>%s: %d</li>", k, v))
-	}
-
-	for k, v := range mc.gauges.Copy() {
-		_, _ = c.Writer.WriteString(fmt.Sprintf("<li>%s: %f</li>", k, v))
-	}
-
-	_, _ = c.Writer.WriteString(fmt.Sprintln("</ul></body></html>"))
-	c.Status(http.StatusOK)
 }

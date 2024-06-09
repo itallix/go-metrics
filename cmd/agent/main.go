@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +17,12 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/go-resty/resty/v2"
+
+	"github.com/itallix/go-metrics/internal/model"
+
+	"github.com/itallix/go-metrics/internal/logger"
 )
 
 const (
@@ -21,7 +30,7 @@ const (
 )
 
 type Sender interface {
-	send(ctx context.Context, serverURL string)
+	send(ctx context.Context)
 }
 
 type Collector interface {
@@ -31,13 +40,15 @@ type Collector interface {
 type agent struct {
 	runtime.MemStats
 
-	Counter           uint64
+	Client            *resty.Client
+	Counter           int64
 	Gauges            map[string]float64
 	RegisteredMetrics []string
 }
 
-func newAgent() *agent {
+func newAgent(client *resty.Client) *agent {
 	return &agent{
+		Client: client,
 		Gauges: make(map[string]float64),
 		RegisteredMetrics: []string{
 			"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
@@ -53,10 +64,8 @@ func (m *agent) collect() {
 	m.Counter++
 
 	var randomValue float64
-	err := binary.Read(rand.Reader, binary.BigEndian, &randomValue)
-	if err != nil {
-		// TODO: integrate zap logger
-		log.Printf("error generating random number: %v", err)
+	if err := binary.Read(rand.Reader, binary.BigEndian, &randomValue); err != nil {
+		logger.Log().Infof("error generating random number: %v", err)
 	}
 	m.Gauges["RandomValue"] = randomValue
 
@@ -70,7 +79,7 @@ func (m *agent) collect() {
 		if !found {
 			_, found = sTyp.FieldByName(mm)
 			if !found {
-				log.Printf("Metric '%s' was not found", mm)
+				logger.Log().Infof("Metric '%s' was not found", mm)
 			}
 			fieldVal := sVal.FieldByName(mm)
 			switch fieldVal.Kind() {
@@ -91,35 +100,42 @@ func (m *agent) collect() {
 	}
 }
 
-func (m *agent) send(ctx context.Context, serverURL string) {
+func (m *agent) send(ctx context.Context) {
 	// TODO: consider replacing with http client that supports retries
 	var wg sync.WaitGroup
 	results := make(chan string, len(m.Gauges))
+	requestPath := "/update"
 
 	for id, val := range m.Gauges {
 		wg.Add(1)
 		go func(id string, val float64) {
 			defer wg.Done()
-			gaugeServerPath := fmt.Sprintf("/update/gauge/%s/%f", id, val)
 			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(tctx, http.MethodPost, serverURL+gaugeServerPath, nil)
-			if err != nil {
-				results <- fmt.Sprintf("Cannot instantiate request object: %v", err)
+			// Use encoder to pass autotests
+			var buf bytes.Buffer
+			gz := gzip.NewWriter(&buf)
+			encoder := json.NewEncoder(gz)
+			if err := encoder.Encode(model.NewGauge(id, &val)); err != nil {
+				logger.Log().Infof("Issue encoding gauge data to json: %v", err)
 				return
 			}
-			req.Header.Set("Content-Type", "text/plain")
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				results <- fmt.Sprintf("Error fetching %s: %v", id, err)
+			if err := gz.Close(); err != nil {
+				logger.Log().Infof("Issue closing gzip: %v", err)
 				return
 			}
-			results <- fmt.Sprintf("Success %s: %s", id, resp.Status)
-			err = resp.Body.Close()
+			resp, err := m.Client.R().
+				SetContext(tctx).
+				SetHeader("Content-Encoding", "gzip").
+				SetBody(buf.Bytes()).
+				Post(requestPath)
+
 			if err != nil {
-				log.Printf("Failed to close reponse body %v\n", err)
+				results <- fmt.Sprintf("Issue sending update request to the server: %v", err)
+				return
 			}
+			results <- fmt.Sprintf("Success %s: %d", id, resp.StatusCode())
 		}(id, val)
 	}
 
@@ -127,13 +143,20 @@ func (m *agent) send(ctx context.Context, serverURL string) {
 	go func() {
 		defer wg.Done()
 		// sending PollCount metric
-		counterServerPath := fmt.Sprintf("/update/counter/PollCount/%d", m.Counter)
-		resp, err := http.Post(serverURL+counterServerPath, "text/plain", nil)
-		defer func() { _ = resp.Body.Close() }()
+		tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
+		defer cancel()
+
+		resp, err := m.Client.R().
+			SetContext(tctx).
+			SetHeader("Accept-Encoding", "gzip").
+			SetBody(model.NewCounter("PollCount", &m.Counter)).
+			Post(requestPath)
+
 		if err != nil {
-			log.Printf("Issue sending PollCount to the server: %v", err)
+			logger.Log().Infof("Issue sending PollCount to the server: %v", err)
 			return
 		}
+		results <- fmt.Sprintf("Success %s: %d", "PollCount", resp.StatusCode())
 		m.Counter = 0
 	}()
 
@@ -143,41 +166,51 @@ func (m *agent) send(ctx context.Context, serverURL string) {
 	}()
 
 	for result := range results {
-		log.Println(result)
+		logger.Log().Info(result)
 	}
 }
 
 func main() {
+	if err := logger.Initialize("debug"); err != nil {
+		log.Fatalf("Cannot instantiate zap logger: %s", err)
+	}
+	defer func() {
+		if deferErr := logger.Log().Sync(); deferErr != nil {
+			logger.Log().Errorf("Failed to sync logger: %s", deferErr)
+		}
+	}()
+
 	serverURL, intervalSettings, err := parseFlags()
 	if err != nil {
-		log.Fatalf(err.Error())
+		logger.Log().Fatalf("Cannot parse flags: %v", err.Error())
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	tickerPoll := time.NewTicker(intervalSettings.PollInterval)
 	defer tickerPoll.Stop()
 	reportPoll := time.NewTicker(intervalSettings.ReportInterval)
 	defer reportPoll.Stop()
 
-	metricsAgent := newAgent()
+	client := resty.New().SetBaseURL("http://"+serverURL.String()).
+		SetHeader("Content-Type", "application/json")
+	metricsAgent := newAgent(client)
 
 	go func() {
 		for {
 			select {
 			case <-tickerPoll.C:
 				metricsAgent.collect()
-				log.Println(metricsAgent.Gauges)
+				logger.Log().Infof("Collected metrics: %v", metricsAgent.Gauges)
 			case <-reportPoll.C:
-				url := "http://" + serverURL.String()
-				resp, httpErr := http.Get(url + "/healthcheck")
+				resp, httpErr := client.R().
+					SetContext(ctx).
+					Get("healthcheck")
 				if httpErr != nil {
-					log.Printf("Server is unavailable %v. Skip sending metrics...", httpErr)
-				} else {
-					_ = resp.Body.Close()
-					log.Println("Sending metrics...")
-					metricsAgent.send(ctx, url)
+					logger.Log().Infof("Server is unavailable %v. Skip sending metrics...", httpErr)
+				} else if resp.StatusCode() == http.StatusOK {
+					logger.Log().Info("Sending metrics...")
+					metricsAgent.send(ctx)
 				}
 			case <-ctx.Done():
 				return
@@ -188,6 +221,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down agent gracefully...")
+	logger.Log().Info("Shutting down agent gracefully...")
 	cancel()
 }
