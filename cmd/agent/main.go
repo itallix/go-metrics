@@ -107,11 +107,30 @@ func (m *agent) send(ctx context.Context) error {
 
 	c, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 	defer cancel()
-	resp, err := m.Client.R().
-		SetContext(c).
-		SetHeader("Content-Encoding", "gzip").
-		SetBody(buf.Bytes()).
-		Post(requestPath)
+
+	retryDelays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+
+	var (
+		err  error
+		resp *resty.Response
+	)
+
+	for _, delay := range retryDelays {
+		resp, err = m.Client.R().
+			SetContext(c).
+			SetHeader("Content-Encoding", "gzip").
+			SetBody(buf.Bytes()).
+			Post(requestPath)
+
+		if err != nil {
+			logger.Log().Errorf("Failed to send request, retrying after %v...", delay)
+			time.Sleep(delay)
+			continue
+		}
+
+		break
+	}
+
 	if err != nil {
 		return err
 	}

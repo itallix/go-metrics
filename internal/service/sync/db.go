@@ -2,6 +2,10 @@ package sync
 
 import (
 	"context"
+	"errors"
+	"github.com/itallix/go-metrics/internal/model"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"time"
 
 	"github.com/itallix/go-metrics/internal/logger"
@@ -10,21 +14,38 @@ import (
 )
 
 type DBSyncer struct {
-	db        storage.DB
-	metricSrv service.MetricService
+	db          storage.DB
+	metricSrv   service.MetricService
+	retryDelays []time.Duration
 }
 
 func NewDBSyncer(metricSrv service.MetricService, db storage.DB) *DBSyncer {
 	return &DBSyncer{
-		db:        db,
-		metricSrv: metricSrv,
+		db:          db,
+		metricSrv:   metricSrv,
+		retryDelays: []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
 	}
 }
 
 func (s *DBSyncer) sync(ctx context.Context) error {
 	logger.Log().Info("Saving metrics to db...")
 	metrics := s.metricSrv.GetMetrics()
-	if err := s.db.WriteMetrics(ctx, metrics); err != nil {
+
+	var err error
+	for _, delay := range s.retryDelays {
+		err = s.db.WriteMetrics(ctx, metrics)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr); pgerrcode.IsConnectionException(pgErr.Code) {
+				logger.Log().Errorf("Failed to connect to DB, retrying after %v...", delay)
+				time.Sleep(delay)
+				continue
+			}
+		}
+		break
+	}
+
+	if err != nil {
 		return err
 	}
 	return nil
@@ -68,10 +89,28 @@ func (s *DBSyncer) Start(ctx context.Context, cfg *Config) {
 
 func (s *DBSyncer) load(ctx context.Context) error {
 	logger.Log().Info("Loading metrics from db...")
-	metrics, err := s.db.LoadMetrics(ctx)
+
+	var (
+		err     error
+		metrics []model.Metrics
+	)
+	for _, delay := range s.retryDelays {
+		metrics, err = s.db.LoadMetrics(ctx)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr); pgerrcode.IsConnectionException(pgErr.Code) {
+				logger.Log().Errorf("Failed to connect to DB, retrying after %v...", delay)
+				time.Sleep(delay)
+				continue
+			}
+		}
+		break
+	}
+
 	if err != nil {
 		return err
 	}
+
 	s.metricSrv.Write(metrics)
 	logger.Log().Info("Metrics has been successfully loaded from db.")
 	return nil
