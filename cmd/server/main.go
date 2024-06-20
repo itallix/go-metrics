@@ -7,19 +7,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/itallix/go-metrics/internal/service/sync"
+	"github.com/itallix/go-metrics/internal/storage"
+	"github.com/itallix/go-metrics/internal/storage/db"
+	"github.com/itallix/go-metrics/internal/storage/memory"
 
 	"github.com/gin-contrib/gzip"
 	_ "github.com/jackc/pgx"
-
-	"github.com/itallix/go-metrics/internal/service"
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/itallix/go-metrics/internal/controller"
-	"github.com/itallix/go-metrics/internal/storage"
 )
 
 const (
@@ -49,43 +48,22 @@ func main() {
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GzipDecompress())
 
-	counters := storage.NewMemStorage[int64]()
-	gauges := storage.NewMemStorage[float64]()
-
-	var syncCh chan int
-	if serverConfig.FilePath == "" {
-		logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
-	}
-	if serverConfig.StoreInterval == 0 && serverConfig.FilePath != "" {
-		syncCh = make(chan int)
-		defer close(syncCh)
-	}
-	metricService := service.NewMetricServiceImpl(counters, gauges, syncCh)
-	metricController := controller.NewMetricController(metricService)
 	ctx := context.Background()
-
-	var (
-		db     storage.DB
-		syncer sync.Syncer
-	)
+	var mStorage storage.Storage
 	if serverConfig.DatabaseDSN != "" {
-		if serverConfig.DatabaseDSN != "" {
-			db, err = storage.NewPgxDB(ctx, serverConfig.DatabaseDSN)
-			if err != nil {
-				logger.Log().Fatalf("Cannot connect to DB: %v", err)
-			} else {
-				defer func() {
-					_ = db.Close()
-				}()
-			}
+		mStorage, err = db.NewPgStorage(ctx, serverConfig.DatabaseDSN)
+		if err != nil {
+			logger.Log().Errorf("Cannot instantiate DB: %v", err)
+			mStorage = memory.NewMemStorage(ctx, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
+				serverConfig.Restore))
 		}
-		syncer = sync.NewDBSyncer(metricService, db)
-	} else if serverConfig.FilePath != "" {
-		syncer = sync.NewFileSyncer(metricService, serverConfig.FilePath)
 	}
-	if syncer != nil {
-		syncer.Start(ctx, sync.NewConfig(serverConfig.StoreInterval, serverConfig.Restore, syncCh))
+	if mStorage == nil {
+		mStorage = memory.NewMemStorage(ctx, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
+			serverConfig.Restore))
 	}
+	defer mStorage.Close()
+	metricController := controller.NewMetricController(mStorage)
 
 	router.GET("/", metricController.ListMetrics)
 	router.POST("/update", metricController.UpdateOne)
@@ -97,11 +75,7 @@ func main() {
 		c.Status(http.StatusOK)
 	})
 	router.GET("/ping", func(c *gin.Context) {
-		if db != nil {
-			if err = db.Ping(ctx); err != nil {
-				_ = c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
+		if mStorage.Ping(c.Request.Context()) {
 			c.Status(http.StatusOK)
 			return
 		}

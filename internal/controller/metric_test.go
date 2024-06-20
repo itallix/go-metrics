@@ -2,20 +2,19 @@ package controller_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/itallix/go-metrics/internal/service"
+	"github.com/itallix/go-metrics/internal/storage/memory"
 
 	"github.com/itallix/go-metrics/internal/model"
 
 	"github.com/itallix/go-metrics/internal/controller"
 
 	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/internal/storage"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -78,9 +77,8 @@ func TestMetricHandler_UpdateOne(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	metricService := service.NewMetricServiceImpl(
-		storage.NewMemStorage[int64](), storage.NewMemStorage[float64](), nil)
-	metricController := controller.NewMetricController(metricService)
+	metricStorage := memory.NewMemStorage(context.Background(), nil)
+	metricController := controller.NewMetricController(metricStorage)
 
 	router.POST(requestPath, metricController.UpdateOne)
 
@@ -128,9 +126,8 @@ func TestMetricHandler_UpdateBatch(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	metricService := service.NewMetricServiceImpl(
-		storage.NewMemStorage[int64](), storage.NewMemStorage[float64](), nil)
-	metricController := controller.NewMetricController(metricService)
+	metricStorage := memory.NewMemStorage(context.Background(), nil)
+	metricController := controller.NewMetricController(metricStorage)
 
 	router.POST(requestPath, metricController.UpdateBatch)
 
@@ -197,13 +194,15 @@ func TestMetricHandler_Value(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	counters := storage.NewMemStorage[int64]()
-	counters.Update("counter0", 5)
-	counters.Update("counter0", 5)
-	gauges := storage.NewMemStorage[float64]()
-	gauges.Set("gauge0", 25.0)
-	metricService := service.NewMetricServiceImpl(counters, gauges, nil)
-	metricController := controller.NewMetricController(metricService)
+	ctx := context.Background()
+	metricStorage := memory.NewMemStorage(ctx, nil)
+	var (
+		counter int64 = 10
+		gauge         = 25.0
+	)
+	_ = metricStorage.Update(ctx, model.NewCounter("counter0", &counter))
+	_ = metricStorage.Update(ctx, model.NewGauge("gauge0", &gauge))
+	metricController := controller.NewMetricController(metricStorage)
 
 	router.POST(requestPath, metricController.GetMetric)
 

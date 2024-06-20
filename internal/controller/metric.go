@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/itallix/go-metrics/internal/service"
+	"github.com/itallix/go-metrics/internal/storage"
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
@@ -19,12 +19,12 @@ type Result struct {
 }
 
 type MetricController struct {
-	metricSrv service.MetricService
+	metricsStorage storage.Storage
 }
 
-func NewMetricController(service service.MetricService) *MetricController {
+func NewMetricController(metricsStorage storage.Storage) *MetricController {
 	return &MetricController{
-		metricSrv: service,
+		metricsStorage: metricsStorage,
 	}
 }
 
@@ -37,7 +37,7 @@ func (mc *MetricController) UpdateBatch(c *gin.Context) {
 		return
 	}
 
-	if err := mc.metricSrv.UpdateBatch(batch); err != nil {
+	if err := mc.metricsStorage.UpdateBatch(c.Request.Context(), batch); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
@@ -56,7 +56,7 @@ func (mc *MetricController) UpdateOne(c *gin.Context) {
 		})
 		return
 	}
-	if err := mc.metricSrv.UpdateOne(&metric); err != nil {
+	if err := mc.metricsStorage.Update(c.Request.Context(), &metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
@@ -76,7 +76,7 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 		return
 	}
 
-	if err := mc.metricSrv.Read(&metric); err != nil {
+	if err := mc.metricsStorage.Read(c.Request.Context(), &metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "metric is not found",
 		})
@@ -113,8 +113,8 @@ func (mc *MetricController) ListMetrics(c *gin.Context) {
 		Counters map[string]int64
 		Gauges   map[string]float64
 	}{
-		Counters: mc.metricSrv.GetCounters(),
-		Gauges:   mc.metricSrv.GetGauges(),
+		Counters: mc.metricsStorage.GetCounters(c.Request.Context()),
+		Gauges:   mc.metricsStorage.GetGauges(c.Request.Context()),
 	}
 
 	c.Header("Content-Type", "text/html")
@@ -168,7 +168,7 @@ func (mc *MetricController) UpdateMetricQuery(c *gin.Context) {
 		return
 	}
 
-	if err := mc.metricSrv.UpdateOne(metric); err != nil {
+	if err := mc.metricsStorage.Update(c.Request.Context(), metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
@@ -195,7 +195,7 @@ func (mc *MetricController) GetMetricQuery(c *gin.Context) {
 		MType: query.Type,
 	}
 
-	if err := mc.metricSrv.Read(metric); err != nil {
+	if err := mc.metricsStorage.Read(c.Request.Context(), metric); err != nil {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "metric is not found",
 		})
