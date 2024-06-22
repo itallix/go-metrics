@@ -2,13 +2,12 @@ package middleware
 
 import (
 	"bytes"
-	"io"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
 	"github.com/itallix/go-metrics/internal/service"
+	"io"
+	"net/http"
 )
 
 func VerifyHash(hashSrv service.HashService) gin.HandlerFunc {
@@ -25,7 +24,7 @@ func VerifyHash(hashSrv service.HashService) gin.HandlerFunc {
 				c.AbortWithStatus(http.StatusBadRequest)
 				return
 			}
-			c.Header(model.HashSha256Header, hashSha256)
+			c.Header(model.HashSha256Header, hashSrv.Sha256sum(b))
 		}
 
 		c.Next()
