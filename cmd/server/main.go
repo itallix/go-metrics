@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/itallix/go-metrics/internal/service"
+
 	"github.com/itallix/go-metrics/internal/storage"
 	"github.com/itallix/go-metrics/internal/storage/db"
 	"github.com/itallix/go-metrics/internal/storage/memory"
@@ -45,6 +47,9 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerWithZap(logger.Log()))
+	if serverConfig.Key != "" {
+		router.Use(middleware.VerifyHash(service.NewHashService(serverConfig.Key)))
+	}
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GzipDecompress())
 

@@ -12,7 +12,7 @@ import (
 func TestCollectMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	metrics := newAgent(client)
+	metrics := newAgent(client, "")
 
 	assert.Empty(t, metrics.Gauges)
 

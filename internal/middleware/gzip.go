@@ -13,7 +13,6 @@ func GzipDecompress() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if strings.Contains(c.GetHeader("Content-Encoding"), "gzip") {
 			reader, err := gzip.NewReader(c.Request.Body)
-			defer func() { _ = reader.Close() }()
 			if err != nil {
 				_ = c.AbortWithError(http.StatusBadRequest, err)
 				return

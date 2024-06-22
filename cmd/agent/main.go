@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/itallix/go-metrics/internal/service"
+
 	"github.com/go-resty/resty/v2"
 
 	"github.com/itallix/go-metrics/internal/model"
@@ -42,9 +44,15 @@ type agent struct {
 	Counter           int64
 	Gauges            map[string]model.Metrics
 	RegisteredMetrics []string
+	HashService       service.HashService
+	RetryDelays       []time.Duration
 }
 
-func newAgent(client *resty.Client) *agent {
+func newAgent(client *resty.Client, secretKey string) *agent {
+	var hashService service.HashService
+	if secretKey != "" {
+		hashService = service.NewHashService(secretKey)
+	}
 	return &agent{
 		Client: client,
 		Gauges: make(map[string]model.Metrics),
@@ -53,6 +61,8 @@ func newAgent(client *resty.Client) *agent {
 			"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
 			"NextGC", "NumForcedGC", "NumGC", "OtherSys", "PauseTotalNs", "StackInuse", "StackSys", "Sys", "TotalAlloc",
 		},
+		HashService: hashService,
+		RetryDelays: []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
 	}
 }
 
@@ -108,19 +118,20 @@ func (m *agent) send(ctx context.Context) error {
 	c, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
 	defer cancel()
 
-	retryDelays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
-
 	var (
 		err  error
 		resp *resty.Response
 	)
+	request := m.Client.R().
+		SetContext(c).
+		SetHeader("Content-Encoding", "gzip").
+		SetBody(buf.Bytes())
+	if m.HashService != nil {
+		request.SetHeader(model.HashSha256Header, m.HashService.Sha256sum(buf.Bytes()))
+	}
 
-	for _, delay := range retryDelays {
-		resp, err = m.Client.R().
-			SetContext(c).
-			SetHeader("Content-Encoding", "gzip").
-			SetBody(buf.Bytes()).
-			Post(requestPath)
+	for _, delay := range m.RetryDelays {
+		resp, err = request.Post(requestPath)
 
 		if err != nil {
 			logger.Log().Errorf("Failed to send request, retrying after %v...", delay)
@@ -152,21 +163,21 @@ func main() {
 		}
 	}()
 
-	serverURL, intervalSettings, err := parseFlags()
+	serverURL, config, err := parseFlags()
 	if err != nil {
 		logger.Log().Fatalf("Cannot parse flags: %v", err.Error())
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	tickerPoll := time.NewTicker(intervalSettings.PollInterval)
+	tickerPoll := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
 	defer tickerPoll.Stop()
-	reportPoll := time.NewTicker(intervalSettings.ReportInterval)
+	reportPoll := time.NewTicker(time.Duration(config.ReportInterval) * time.Second)
 	defer reportPoll.Stop()
 
 	client := resty.New().SetBaseURL("http://"+serverURL.String()).
 		SetHeader("Content-Type", "application/json")
-	metricsAgent := newAgent(client)
+	metricsAgent := newAgent(client, config.Key)
 
 	go func() {
 		for {
