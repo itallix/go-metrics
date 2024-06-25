@@ -92,6 +92,9 @@ func (mc *MetricController) ListMetrics(c *gin.Context) {
 	<title>Metrics</title>
 </head>
 <body>
+{{- $hasCounters := len .Counters }}
+{{- $hasGauges := len .Gauges }}
+{{- if or (gt $hasCounters 0) (gt $hasGauges 0) }}
 	<ul>
 		{{- range $key, $value := .Counters }}
 		<li>{{ $key }}: {{ $value }}</li>
@@ -101,6 +104,9 @@ func (mc *MetricController) ListMetrics(c *gin.Context) {
 		{{- end }}
 	</ul>
 </body>
+{{- else }}
+<p>No metrics found</p>
+{{- end }}
 </html>`
 
 	t, err := template.New("webpage").Parse(tpl)
@@ -109,12 +115,24 @@ func (mc *MetricController) ListMetrics(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
+	counters, err := mc.metricsStorage.GetCounters(ctx)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Error reading counters from storage")
+		return
+	}
+	gauges, err := mc.metricsStorage.GetGauges(ctx)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Error reading gauges from storage")
+		return
+	}
+
 	data := struct {
 		Counters map[string]int64
 		Gauges   map[string]float64
 	}{
-		Counters: mc.metricsStorage.GetCounters(c.Request.Context()),
-		Gauges:   mc.metricsStorage.GetGauges(c.Request.Context()),
+		Counters: counters,
+		Gauges:   gauges,
 	}
 
 	c.Header("Content-Type", "text/html")

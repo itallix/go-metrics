@@ -40,6 +40,11 @@ func createTablesIfNeeded(ctx context.Context, pool *pgxpool.Pool) error {
 	defer cancel()
 
 	tx, err := pool.Begin(c)
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(c)
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -149,15 +154,14 @@ func (m *PgStorage) Read(ctx context.Context, metric *model.Metrics) error {
 	}
 }
 
-func (m *PgStorage) GetCounters(ctx context.Context) map[string]int64 {
+func (m *PgStorage) GetCounters(ctx context.Context) (map[string]int64, error) {
 	c, cancel := context.WithTimeout(ctx, TimeoutInSeconds*time.Second)
 	defer cancel()
 
 	counters := make(map[string]int64)
 	rows, err := m.pool.Query(c, "SELECT * FROM counters")
 	if err != nil {
-		logger.Log().Errorf("Cannot read metrics from 'counters': %v", err)
-		return counters
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -167,23 +171,24 @@ func (m *PgStorage) GetCounters(ctx context.Context) map[string]int64 {
 			delta int64
 		)
 		if err = rows.Scan(&id, &delta); err != nil {
-			logger.Log().Errorf("Cannot read metrics from 'counters': %v", err)
-			return counters
+			return nil, err
 		}
 		counters[id] = delta
 	}
-	return counters
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return counters, nil
 }
 
-func (m *PgStorage) GetGauges(ctx context.Context) map[string]float64 {
+func (m *PgStorage) GetGauges(ctx context.Context) (map[string]float64, error) {
 	c, cancel := context.WithTimeout(ctx, TimeoutInSeconds*time.Second)
 	defer cancel()
 
 	gauges := make(map[string]float64)
 	rows, err := m.pool.Query(c, "SELECT * FROM gauges")
 	if err != nil {
-		logger.Log().Errorf("Cannot read metrics from 'gauges': %v", err)
-		return gauges
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -193,12 +198,14 @@ func (m *PgStorage) GetGauges(ctx context.Context) map[string]float64 {
 			val float64
 		)
 		if err = rows.Scan(&id, &val); err != nil {
-			logger.Log().Errorf("Cannot read metrics from 'gauges': %v", err)
-			return gauges
+			return nil, err
 		}
 		gauges[id] = val
 	}
-	return gauges
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return gauges, nil
 }
 
 func (m *PgStorage) Ping(ctx context.Context) bool {

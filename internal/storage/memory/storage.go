@@ -110,12 +110,12 @@ func (m *MemStorage) Read(_ context.Context, metric *model.Metrics) error {
 	}
 }
 
-func (m *MemStorage) GetCounters(_ context.Context) map[string]int64 {
-	return m.counters.Copy()
+func (m *MemStorage) GetCounters(_ context.Context) (map[string]int64, error) {
+	return m.counters.Copy(), nil
 }
 
-func (m *MemStorage) GetGauges(_ context.Context) map[string]float64 {
-	return m.gauges.Copy()
+func (m *MemStorage) GetGauges(_ context.Context) (map[string]float64, error) {
+	return m.gauges.Copy(), nil
 }
 
 func (m *MemStorage) Ping(_ context.Context) bool {

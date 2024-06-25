@@ -11,8 +11,8 @@ type Storage interface {
 	Update(ctx context.Context, metric *model.Metrics) error
 	UpdateBatch(ctx context.Context, metrics []model.Metrics) error
 	Read(ctx context.Context, metric *model.Metrics) error
-	GetCounters(ctx context.Context) map[string]int64
-	GetGauges(ctx context.Context) map[string]float64
+	GetCounters(ctx context.Context) (map[string]int64, error)
+	GetGauges(ctx context.Context) (map[string]float64, error)
 
 	Ping(ctx context.Context) bool
 	Close()
