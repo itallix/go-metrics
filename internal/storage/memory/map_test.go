@@ -1,24 +1,22 @@
-package storage_test
+package memory
 
 import (
 	"testing"
 
-	"github.com/itallix/go-metrics/internal/storage"
-
 	"github.com/stretchr/testify/assert"
 )
 
-func TestStorageTest_UpdateValue(t *testing.T) {
-	memStorage := storage.NewMemStorage[int64]()
-	memStorage.Update("counter0", 123)
-	memStorage.Update("counter0", 132)
+func TestConcurrentMap_UpdateValue(t *testing.T) {
+	memStorage := NewConcurrentMap[int64]()
+	memStorage.Inc("counter0", 123)
+	memStorage.Inc("counter0", 132)
 	val, ok := memStorage.Get("counter0")
 	assert.True(t, ok)
 	assert.Equal(t, int64(255), val)
 }
 
 func TestStorageTest_SetValue(t *testing.T) {
-	memStorage := storage.NewMemStorage[float64]()
+	memStorage := NewConcurrentMap[float64]()
 	memStorage.Set("gauge0", 123.983)
 	memStorage.Set("gauge0", 132.625)
 	val, ok := memStorage.Get("gauge0")
@@ -27,8 +25,8 @@ func TestStorageTest_SetValue(t *testing.T) {
 }
 
 func TestStorageTest_ValueDoesntExist(t *testing.T) {
-	memStorage := storage.NewMemStorage[int64]()
-	memStorage.Update("counter0", 123)
+	memStorage := NewConcurrentMap[int64]()
+	memStorage.Inc("counter0", 123)
 
 	val, ok := memStorage.Get("metric")
 

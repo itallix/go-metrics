@@ -7,14 +7,12 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"reflect"
 	"runtime"
-	"sync"
 	"syscall"
 	"time"
 
@@ -30,7 +28,7 @@ const (
 )
 
 type Sender interface {
-	send(ctx context.Context)
+	send(ctx context.Context) error
 }
 
 type Collector interface {
@@ -42,14 +40,14 @@ type agent struct {
 
 	Client            *resty.Client
 	Counter           int64
-	Gauges            map[string]float64
+	Gauges            map[string]model.Metrics
 	RegisteredMetrics []string
 }
 
 func newAgent(client *resty.Client) *agent {
 	return &agent{
 		Client: client,
-		Gauges: make(map[string]float64),
+		Gauges: make(map[string]model.Metrics),
 		RegisteredMetrics: []string{
 			"Alloc", "BuckHashSys", "Frees", "GCCPUFraction", "GCSys", "HeapAlloc", "HeapIdle", "HeapInuse", "HeapObjects",
 			"HeapReleased", "HeapSys", "LastGC", "Lookups", "MCacheInuse", "MCacheSys", "MSpanInuse", "MSpanSys", "Mallocs",
@@ -65,109 +63,83 @@ func (m *agent) collect() {
 
 	var randomValue float64
 	if err := binary.Read(rand.Reader, binary.BigEndian, &randomValue); err != nil {
-		logger.Log().Infof("error generating random number: %v", err)
+		logger.Log().Errorf("error generating random number: %v", err)
 	}
-	m.Gauges["RandomValue"] = randomValue
+	m.Gauges["RandomValue"] = *model.NewGauge("RandomValue", &randomValue)
 
-	// TODO: consider refactor reflection part
-	typ := reflect.TypeOf(m.MemStats)
-	val := reflect.ValueOf(m.MemStats)
-	sTyp := reflect.TypeOf(m.MemStats.BySize)
-	sVal := reflect.ValueOf(m.MemStats.BySize)
-	for _, mm := range m.RegisteredMetrics {
-		_, found := typ.FieldByName(mm)
-		if !found {
-			_, found = sTyp.FieldByName(mm)
-			if !found {
-				logger.Log().Infof("Metric '%s' was not found", mm)
-			}
-			fieldVal := sVal.FieldByName(mm)
+	for _, name := range m.RegisteredMetrics {
+		v := reflect.ValueOf(m.MemStats)
+		fieldVal := v.FieldByName(name)
+		var vv float64
+
+		if fieldVal.IsValid() {
 			switch fieldVal.Kind() {
 			case reflect.Uint, reflect.Uint64, reflect.Uint32:
-				m.Gauges[mm] = float64(fieldVal.Uint())
+				vv = float64(fieldVal.Uint())
 			default:
-				m.Gauges[mm] = fieldVal.Float()
+				vv = fieldVal.Float()
 			}
-			continue
-		}
-		fieldVal := val.FieldByName(mm)
-		switch fieldVal.Kind() {
-		case reflect.Uint, reflect.Uint64, reflect.Uint32:
-			m.Gauges[mm] = float64(fieldVal.Uint())
-		default:
-			m.Gauges[mm] = fieldVal.Float()
+			m.Gauges[name] = *model.NewGauge(name, &vv)
+		} else {
+			logger.Log().Errorf("Field %s does not exist in MemStats\n", name)
 		}
 	}
 }
 
-func (m *agent) send(ctx context.Context) {
-	// TODO: consider replacing with http client that supports retries
-	var wg sync.WaitGroup
-	results := make(chan string, len(m.Gauges))
-	requestPath := "/update"
+func (m *agent) send(ctx context.Context) error {
+	requestPath := "/updates"
+	var metrics []model.Metrics
+	for _, gauge := range m.Gauges {
+		metrics = append(metrics, gauge)
+	}
+	metrics = append(metrics, *model.NewCounter("PollCount", &m.Counter))
 
-	for id, val := range m.Gauges {
-		wg.Add(1)
-		go func(id string, val float64) {
-			defer wg.Done()
-			tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
-			defer cancel()
-
-			// Use encoder to pass autotests
-			var buf bytes.Buffer
-			gz := gzip.NewWriter(&buf)
-			encoder := json.NewEncoder(gz)
-			if err := encoder.Encode(model.NewGauge(id, &val)); err != nil {
-				logger.Log().Infof("Issue encoding gauge data to json: %v", err)
-				return
-			}
-			if err := gz.Close(); err != nil {
-				logger.Log().Infof("Issue closing gzip: %v", err)
-				return
-			}
-			resp, err := m.Client.R().
-				SetContext(tctx).
-				SetHeader("Content-Encoding", "gzip").
-				SetBody(buf.Bytes()).
-				Post(requestPath)
-
-			if err != nil {
-				results <- fmt.Sprintf("Issue sending update request to the server: %v", err)
-				return
-			}
-			results <- fmt.Sprintf("Success %s: %d", id, resp.StatusCode())
-		}(id, val)
+	// Use encoder to pass autotests
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	encoder := json.NewEncoder(gz)
+	if err := encoder.Encode(metrics); err != nil {
+		return err
+	}
+	if err := gz.Close(); err != nil {
+		return err
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		// sending PollCount metric
-		tctx, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
-		defer cancel()
+	c, cancel := context.WithTimeout(ctx, requestTimeoutSeconds*time.Second)
+	defer cancel()
 
-		resp, err := m.Client.R().
-			SetContext(tctx).
-			SetHeader("Accept-Encoding", "gzip").
-			SetBody(model.NewCounter("PollCount", &m.Counter)).
+	retryDelays := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+
+	var (
+		err  error
+		resp *resty.Response
+	)
+
+	for _, delay := range retryDelays {
+		resp, err = m.Client.R().
+			SetContext(c).
+			SetHeader("Content-Encoding", "gzip").
+			SetBody(buf.Bytes()).
 			Post(requestPath)
 
 		if err != nil {
-			logger.Log().Infof("Issue sending PollCount to the server: %v", err)
-			return
+			logger.Log().Errorf("Failed to send request, retrying after %v...", delay)
+			time.Sleep(delay)
+			continue
 		}
-		results <- fmt.Sprintf("Success %s: %d", "PollCount", resp.StatusCode())
-		m.Counter = 0
-	}()
 
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	for result := range results {
-		logger.Log().Info(result)
+		break
 	}
+
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode() == http.StatusOK {
+		m.Counter = 0
+	}
+
+	return nil
 }
 
 func main() {
@@ -201,16 +173,18 @@ func main() {
 			select {
 			case <-tickerPoll.C:
 				metricsAgent.collect()
-				logger.Log().Infof("Collected metrics: %v", metricsAgent.Gauges)
+				var metrics []model.Metrics
+				for _, gauge := range metricsAgent.Gauges {
+					metrics = append(metrics, gauge)
+				}
+				metrics = append(metrics, *model.NewCounter("PollCount", &metricsAgent.Counter))
+				logger.Log().Infof("Collected metrics: %v", metrics)
 			case <-reportPoll.C:
-				resp, httpErr := client.R().
-					SetContext(ctx).
-					Get("healthcheck")
-				if httpErr != nil {
-					logger.Log().Infof("Server is unavailable %v. Skip sending metrics...", httpErr)
-				} else if resp.StatusCode() == http.StatusOK {
-					logger.Log().Info("Sending metrics...")
-					metricsAgent.send(ctx)
+				logger.Log().Info("Sending metrics...")
+				if err = metricsAgent.send(ctx); err != nil {
+					logger.Log().Errorf("Error sending metrics %v", err)
+				} else {
+					logger.Log().Info("Metrics has been successfully sent")
 				}
 			case <-ctx.Done():
 				return

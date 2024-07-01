@@ -2,20 +2,23 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/gin-contrib/gzip"
+	"github.com/itallix/go-metrics/internal/storage"
+	"github.com/itallix/go-metrics/internal/storage/db"
+	"github.com/itallix/go-metrics/internal/storage/memory"
 
-	"github.com/itallix/go-metrics/internal/service"
+	"github.com/gin-contrib/gzip"
+	_ "github.com/jackc/pgx"
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/itallix/go-metrics/internal/controller"
-	"github.com/itallix/go-metrics/internal/storage"
 )
 
 const (
@@ -34,7 +37,7 @@ func main() {
 		}
 	}()
 
-	addr, storeSettings, err := parseFlags()
+	addr, serverConfig, err := parseFlags()
 	if err != nil {
 		logger.Log().Errorf("Can't parse flags: %v", err.Error())
 	}
@@ -45,34 +48,38 @@ func main() {
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GzipDecompress())
 
-	counters := storage.NewMemStorage[int64]()
-	gauges := storage.NewMemStorage[float64]()
-
-	var syncCh chan int
-	if storeSettings.FilePath == "" {
-		logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
+	ctx := context.Background()
+	var mStorage storage.Storage
+	if serverConfig.DatabaseDSN != "" {
+		mStorage, err = db.NewPgStorage(ctx, serverConfig.DatabaseDSN)
+		if err != nil {
+			logger.Log().Errorf("Cannot instantiate DB: %v", err)
+			mStorage = memory.NewMemStorage(ctx, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
+				serverConfig.Restore))
+		}
 	}
-	if storeSettings.StoreInterval == 0 && storeSettings.FilePath != "" {
-		syncCh = make(chan int)
-		defer close(syncCh)
+	if mStorage == nil {
+		mStorage = memory.NewMemStorage(ctx, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
+			serverConfig.Restore))
 	}
-	metricService := service.NewMetricServiceImpl(counters, gauges, syncCh)
-	metricController := controller.NewMetricController(metricService)
-
-	if storeSettings.FilePath != "" {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		syncer := service.NewSyncerImpl(metricService, storeSettings.StoreInterval, storeSettings.FilePath, syncCh)
-		syncer.Start(ctx, storeSettings.Restore)
-	}
+	defer mStorage.Close()
+	metricController := controller.NewMetricController(mStorage)
 
 	router.GET("/", metricController.ListMetrics)
-	router.POST("/update", metricController.UpdateMetric)
+	router.POST("/update", metricController.UpdateOne)
+	router.POST("/updates", metricController.UpdateBatch)
 	router.POST("/value", metricController.GetMetric)
 	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
 	router.GET("/value/:metricType/:metricName", metricController.GetMetricQuery)
 	router.GET("/healthcheck", func(c *gin.Context) {
 		c.Status(http.StatusOK)
+	})
+	router.GET("/ping", func(c *gin.Context) {
+		if mStorage.Ping(c.Request.Context()) {
+			c.Status(http.StatusOK)
+			return
+		}
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("internal server error"))
 	})
 
 	server := &http.Server{
