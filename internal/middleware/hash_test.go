@@ -30,7 +30,7 @@ func TestHashMiddleware_OK(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.NotNil(t, w.Header().Get(model.HashSha256Header))
-	assert.Equal(t, w.Code, http.StatusOK)
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestHashMiddleware_BadRequest(t *testing.T) {
@@ -51,5 +51,5 @@ func TestHashMiddleware_BadRequest(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.NotNil(t, w.Header().Get(model.HashSha256Header))
-	assert.Equal(t, w.Code, http.StatusBadRequest)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
