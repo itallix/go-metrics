@@ -71,14 +71,11 @@ func main() {
 	metricController := controller.NewMetricController(mStorage)
 
 	router.GET("/", metricController.ListMetrics)
-	router.POST("/update", metricController.UpdateOne)
-	router.POST("/updates", metricController.UpdateBatch)
-	router.POST("/value", metricController.GetMetric)
+	router.POST("/update/", metricController.UpdateOne)
+	router.POST("/updates/", metricController.UpdateBatch)
+	router.POST("/value/", metricController.GetMetric)
 	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
 	router.GET("/value/:metricType/:metricName", metricController.GetMetricQuery)
-	router.GET("/healthcheck", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
 	router.GET("/ping", func(c *gin.Context) {
 		if mStorage.Ping(c.Request.Context()) {
 			c.Status(http.StatusOK)
