@@ -1,6 +1,8 @@
 package main
 
 import (
+	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,11 +16,12 @@ import (
 func TestCollectRuntimeMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	agent := newAgent(client, "")
+	agent, err := newAgent(client, "")
+	require.NoError(t, err)
 
 	assert.Empty(t, agent.Gauges)
 
-	err := agent.collectRuntime()
+	err = agent.collectRuntime()
 	require.NoError(t, err)
 
 	for _, key := range RuntimeMetrics {
@@ -31,17 +34,21 @@ func TestCollectRuntimeMetrics(t *testing.T) {
 func TestCollectExtraMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	agent := newAgent(client, "")
-
+	agent, err := newAgent(client, "")
+	require.NoError(t, err)
 	assert.Empty(t, agent.Gauges)
 
-	err := agent.collectExtra()
+	err = agent.collectExtra()
 	require.NoError(t, err)
 
-	metrics := []string{"TotalMemory", "FreeMemory", "CPUutilization1"}
-
-	for _, key := range metrics {
+	for _, key := range []string{"TotalMemory", "FreeMemory"} {
 		_, exists := agent.Gauges[key]
 		assert.Truef(t, exists, "Expected key %s is missing in the map", key)
+	}
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		metricName := "CPUutilization" + strconv.Itoa(i)
+		_, exists := agent.Gauges[metricName]
+		assert.Truef(t, exists, "Expected key %s is missing in the map", metricName)
 	}
 }

@@ -29,7 +29,7 @@ func main() {
 
 	serverURL, config, err := parseFlags()
 	if err != nil {
-		logger.Log().Fatalf("Cannot parse flags: %v", err.Error())
+		logger.Log().Fatalf("Cannot parse flags: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -44,7 +44,10 @@ func main() {
 
 	client := resty.New().SetBaseURL("http://"+serverURL.String()).
 		SetHeader("Content-Type", "application/json")
-	metricsAgent := newAgent(client, config.Key)
+	metricsAgent, err := newAgent(client, config.Key)
+	if err != nil {
+		logger.Log().Fatalf("Failed to instantiate agent: %v", err)
+	}
 
 	for i := 0; i < config.RateLimit; i++ {
 		go metricsAgent.send(ctx, jobs, results)

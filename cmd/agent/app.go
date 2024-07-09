@@ -8,17 +8,19 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"reflect"
+	"runtime"
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
 	"github.com/itallix/go-metrics/internal/service"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
-	"net/http"
-	"reflect"
-	"runtime"
-	"sync"
-	"time"
 )
 
 const (
@@ -40,25 +42,30 @@ type agent struct {
 	HashService service.HashService
 	RetryDelays []time.Duration
 	mu          sync.RWMutex
+	cpuCount    int
 }
 
-func newAgent(client *resty.Client, secretKey string) *agent {
+func newAgent(client *resty.Client, secretKey string) (*agent, error) {
 	var hashService service.HashService
 	if secretKey != "" {
 		hashService = service.NewHashService(secretKey)
 	}
+	cpuCount, err := cpu.Counts(true)
+	if err != nil {
+		return nil, fmt.Errorf("cannot detect number of cpus: %w", err)
+	}
+
 	return &agent{
 		Client:      client,
 		Gauges:      make(map[string]model.Metrics),
 		HashService: hashService,
 		RetryDelays: []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
-	}
+		cpuCount:    cpuCount,
+	}, nil
 }
 
 func (m *agent) collectRuntime() error {
 	runtime.ReadMemStats(&m.MemStats)
-
-	m.Counter++
 
 	var randomValue float64
 	if err := binary.Read(rand.Reader, binary.BigEndian, &randomValue); err != nil {
@@ -66,6 +73,7 @@ func (m *agent) collectRuntime() error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.Counter++
 	m.Gauges["RandomValue"] = *model.NewGauge("RandomValue", &randomValue)
 
 	for _, name := range RuntimeMetrics {
@@ -94,7 +102,7 @@ func (m *agent) collectExtra() error {
 	if err != nil {
 		return fmt.Errorf("error collecting virtual memory: %w", err)
 	}
-	percentages, err := cpu.Percent(1*time.Second, false)
+	percentages, err := cpu.Percent(1*time.Second, true)
 	if err != nil {
 		return fmt.Errorf("error collecting cpu utilization: %w", err)
 	}
@@ -104,7 +112,10 @@ func (m *agent) collectExtra() error {
 	defer m.mu.Unlock()
 	m.Gauges["TotalMemory"] = *model.NewGauge("TotalMemory", &totalMem)
 	m.Gauges["FreeMemory"] = *model.NewGauge("FreeMemory", &freeMem)
-	m.Gauges["CPUutilization1"] = *model.NewGauge("CPUutilization1", &percentages[0])
+	for i := 0; i < m.cpuCount; i++ {
+		metricName := "CPUutilization" + strconv.Itoa(i)
+		m.Gauges[metricName] = *model.NewGauge(metricName, &percentages[i])
+	}
 	return err
 }
 
