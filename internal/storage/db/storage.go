@@ -55,7 +55,7 @@ func createTablesIfNeeded(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	logger.Log().Infof("Table 'gauges' has been successfully created: %s", status)
 
-	status, err = tx.Exec(c, `CREATE TABLE IF NOT EXISTS counters(id text primary key, delta integer)`)
+	status, err = tx.Exec(c, `CREATE TABLE IF NOT EXISTS counters(id text primary key, delta bigint)`)
 	if err != nil {
 		return err
 	}
@@ -85,6 +85,9 @@ func (m *PgStorage) Update(ctx context.Context, metric *model.Metrics) error {
 		metric.Delta = &newDelta
 
 	case model.Gauge:
+		if metric.Value == nil {
+			return storage.ErrMetricNotSupported
+		}
 		query := `INSERT INTO gauges(id, val) VALUES($1, $2)
 		ON CONFLICT(id)
 		DO UPDATE SET val = EXCLUDED.val RETURNING val`

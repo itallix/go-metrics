@@ -18,6 +18,7 @@ type ServerConfig struct {
 	FilePath      string `env:"FILE_STORAGE_PATH"`
 	Restore       bool   `env:"RESTORE"`
 	DatabaseDSN   string `env:"DATABASE_DSN"`
+	Key           string `env:"KEY"`
 }
 
 func parseFlags() (*mflag.RunAddress, *ServerConfig, error) {
@@ -30,6 +31,7 @@ func parseFlags() (*mflag.RunAddress, *ServerConfig, error) {
 	flag.StringVar(&cfg.FilePath, "f", "/tmp/metrics-db.json", "Filepath where metrics will be saved")
 	flag.BoolVar(&cfg.Restore, "r", true, "Whether server needs to restore metrics from file or not")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "Database connection string")
+	flag.StringVar(&cfg.Key, "k", "", "Key that will be used to calculate hash")
 	flag.Parse()
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/itallix/go-metrics/internal/service"
+
 	"github.com/itallix/go-metrics/internal/storage"
 	"github.com/itallix/go-metrics/internal/storage/db"
 	"github.com/itallix/go-metrics/internal/storage/memory"
@@ -45,6 +47,9 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerWithZap(logger.Log()))
+	if serverConfig.Key != "" {
+		router.Use(middleware.VerifyHash(service.NewHashService(serverConfig.Key)))
+	}
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GzipDecompress())
 
@@ -66,14 +71,11 @@ func main() {
 	metricController := controller.NewMetricController(mStorage)
 
 	router.GET("/", metricController.ListMetrics)
-	router.POST("/update", metricController.UpdateOne)
-	router.POST("/updates", metricController.UpdateBatch)
-	router.POST("/value", metricController.GetMetric)
+	router.POST("/update/", metricController.UpdateOne)
+	router.POST("/updates/", metricController.UpdateBatch)
+	router.POST("/value/", metricController.GetMetric)
 	router.POST("/update/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
 	router.GET("/value/:metricType/:metricName", metricController.GetMetricQuery)
-	router.GET("/healthcheck", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
 	router.GET("/ping", func(c *gin.Context) {
 		if mStorage.Ping(c.Request.Context()) {
 			c.Status(http.StatusOK)
