@@ -7,9 +7,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/itallix/go-metrics/internal/model"
 	"github.com/itallix/go-metrics/internal/service"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestHashMiddleware_OK(t *testing.T) {

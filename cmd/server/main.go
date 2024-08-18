@@ -7,20 +7,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/itallix/go-metrics/internal/service"
+	"github.com/gin-contrib/gzip"
+	"github.com/gin-gonic/gin"
 
+	"github.com/itallix/go-metrics/internal/controller"
+	"github.com/itallix/go-metrics/internal/logger"
+	"github.com/itallix/go-metrics/internal/middleware"
+	"github.com/itallix/go-metrics/internal/service"
 	"github.com/itallix/go-metrics/internal/storage"
 	"github.com/itallix/go-metrics/internal/storage/db"
 	"github.com/itallix/go-metrics/internal/storage/memory"
 
-	"github.com/gin-contrib/gzip"
 	_ "github.com/jackc/pgx"
-
-	"github.com/itallix/go-metrics/internal/logger"
-	"github.com/itallix/go-metrics/internal/middleware"
-
-	"github.com/gin-gonic/gin"
-	"github.com/itallix/go-metrics/internal/controller"
 )
 
 const (

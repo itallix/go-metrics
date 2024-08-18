@@ -6,12 +6,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/itallix/go-metrics/internal/storage"
+	"github.com/gin-gonic/gin"
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
-
-	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/storage"
 )
 
 type Result struct {

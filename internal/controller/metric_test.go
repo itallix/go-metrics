@@ -8,14 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/itallix/go-metrics/internal/storage/memory"
-
-	"github.com/itallix/go-metrics/internal/model"
-
-	"github.com/itallix/go-metrics/internal/controller"
-
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/itallix/go-metrics/internal/controller"
+	"github.com/itallix/go-metrics/internal/model"
+	"github.com/itallix/go-metrics/internal/storage/memory"
 )
 
 func TestMetricHandler_UpdateOne(t *testing.T) {

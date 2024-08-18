@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
 	"github.com/itallix/go-metrics/internal/storage"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const TimeoutInSeconds = 3

@@ -5,12 +5,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCollectRuntimeMetrics(t *testing.T) {

@@ -8,13 +8,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/go-resty/resty/v2"
-
-	"github.com/itallix/go-metrics/internal/model"
-
 	"github.com/itallix/go-metrics/internal/logger"
+	"github.com/itallix/go-metrics/internal/model"
 )
 
 func main() {

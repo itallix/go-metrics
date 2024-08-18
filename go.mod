@@ -1,6 +1,6 @@
 module github.com/itallix/go-metrics
 
-go 1.21.9
+go 1.21
 
 require (
 	github.com/caarlos0/env v3.5.0+incompatible

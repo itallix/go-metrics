@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/caarlos0/env"
+
 	mflag "github.com/itallix/go-metrics/internal/flag"
 )
 

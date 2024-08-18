@@ -3,9 +3,8 @@ package middleware
 import (
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func LoggerWithZap(logger *zap.SugaredLogger) gin.HandlerFunc {
