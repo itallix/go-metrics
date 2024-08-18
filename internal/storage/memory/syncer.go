@@ -35,7 +35,8 @@ type FileSyncer struct {
 	syncCh   chan int
 }
 
-func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64], syncCh chan int) *FileSyncer {
+func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64],
+	syncCh chan int) *FileSyncer {
 	return &FileSyncer{
 		config:   config,
 		counters: counters,

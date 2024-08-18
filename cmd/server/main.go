@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-contrib/gzip"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 
 	"github.com/itallix/go-metrics/internal/controller"
@@ -48,7 +49,7 @@ func main() {
 	if serverConfig.Key != "" {
 		router.Use(middleware.VerifyHash(service.NewHashService(serverConfig.Key)))
 	}
-	router.Use(gzip.Gzip(gzip.DefaultCompression))
+	router.Use(gzip.Gzip(gzip.BestCompression))
 	router.Use(middleware.GzipDecompress())
 
 	ctx := context.Background()
@@ -81,6 +82,7 @@ func main() {
 		}
 		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("internal server error"))
 	})
+	pprof.Register(router)
 
 	server := &http.Server{
 		Addr:         addr.String(),

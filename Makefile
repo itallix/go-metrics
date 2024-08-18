@@ -19,3 +19,7 @@ stop-pg:
 .PHONY: clean-data
 clean-data:
 	sudo rm -rf ./db/data/
+
+.PHONY: lint
+lint:
+	golangci-lint run --fix
