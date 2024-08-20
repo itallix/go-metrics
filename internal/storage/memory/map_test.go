@@ -7,7 +7,7 @@ import (
 )
 
 func TestConcurrentMap_UpdateValue(t *testing.T) {
-	m := NewConcurrentMap[int64]()
+	m := NewConcurrentMap[int64](1)
 	m.Inc("counter0", 123)
 	m.Inc("counter0", 132)
 	val, ok := m.Get("counter0")
@@ -16,7 +16,7 @@ func TestConcurrentMap_UpdateValue(t *testing.T) {
 }
 
 func TestConcurrentMap_SetValue(t *testing.T) {
-	m := NewConcurrentMap[float64]()
+	m := NewConcurrentMap[float64](1)
 	m.Set("gauge0", 123.983)
 	m.Set("gauge0", 132.625)
 	val, ok := m.Get("gauge0")
@@ -25,7 +25,7 @@ func TestConcurrentMap_SetValue(t *testing.T) {
 }
 
 func TestConcurrentMap_ValueDoesntExist(t *testing.T) {
-	m := NewConcurrentMap[int64]()
+	m := NewConcurrentMap[int64](1)
 	m.Inc("counter0", 123)
 
 	val, ok := m.Get("metric")
@@ -35,7 +35,7 @@ func TestConcurrentMap_ValueDoesntExist(t *testing.T) {
 }
 
 func TestConcurrentMap_Copy(t *testing.T) {
-	m1 := NewConcurrentMap[int64]()
+	m1 := NewConcurrentMap[int64](1)
 	m1.Inc("counter0", 123)
 
 	m2 := m1.Copy()
@@ -45,4 +45,13 @@ func TestConcurrentMap_Copy(t *testing.T) {
 	assert.Equal(t, int64(123), val)
 	assert.True(t, ok)
 	assert.Equal(t, int64(234), m2["counter0"])
+}
+
+func TestConcurrentMap_Len(t *testing.T) {
+	m1 := NewConcurrentMap[int64](3)
+	m1.Inc("counter0", 0)
+	m1.Inc("counter1", 1)
+	m1.Inc("counter2", 2)
+
+	assert.Equal(t, 3, m1.Len())
 }

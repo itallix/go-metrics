@@ -8,6 +8,11 @@ import (
 	"github.com/itallix/go-metrics/internal/storage"
 )
 
+const (
+	DefaultCounterCapacity = 1
+	DefaultGaugeCapacity   = 32
+)
+
 type MemStorage struct {
 	counters *ConcurrentMap[int64]
 	gauges   *ConcurrentMap[float64]
@@ -16,8 +21,8 @@ type MemStorage struct {
 
 func NewMemStorage(ctx context.Context, config *Config) *MemStorage {
 	var syncCh chan int
-	counters := NewConcurrentMap[int64]()
-	gauges := NewConcurrentMap[float64]()
+	counters := NewConcurrentMap[int64](DefaultCounterCapacity)
+	gauges := NewConcurrentMap[float64](DefaultGaugeCapacity)
 
 	if config != nil {
 		if config.interval == 0 && config.filepath != "" {

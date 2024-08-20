@@ -2,14 +2,16 @@ package memory
 
 import "sync"
 
+// ConcurrentMap is a thread-safe map implementation.
+// It uses sync.RWMutex to protect read/update operations to standard library map.
 type ConcurrentMap[T float64 | int64] struct {
 	store map[string]T
 	mu    sync.RWMutex
 }
 
-func NewConcurrentMap[T float64 | int64]() *ConcurrentMap[T] {
+func NewConcurrentMap[T float64 | int64](size int) *ConcurrentMap[T] {
 	return &ConcurrentMap[T]{
-		store: make(map[string]T),
+		store: make(map[string]T, size),
 	}
 }
 
@@ -48,4 +50,8 @@ func (m *ConcurrentMap[T]) Init(values map[string]T) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.store = values
+}
+
+func (m *ConcurrentMap[T]) Len() int {
+	return len(m.store)
 }

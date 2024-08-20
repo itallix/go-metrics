@@ -7,6 +7,7 @@ import (
 	"github.com/itallix/go-metrics/internal/model"
 )
 
+// Storage defines an interface for the storage API, detailing the methods used to interact with storage systems.
 type Storage interface {
 	Update(ctx context.Context, metric *model.Metrics) error
 	UpdateBatch(ctx context.Context, metrics []model.Metrics) error

@@ -10,14 +10,11 @@ import (
 	"github.com/itallix/go-metrics/internal/model"
 )
 
+// Config defines start parameters for the sync process.
 type Config struct {
 	filepath string
 	interval int
 	restore  bool
-}
-
-type Syncer interface {
-	Start(ctx context.Context, cfg *Config)
 }
 
 func NewConfig(filepath string, interval int, restore bool) *Config {
@@ -45,17 +42,20 @@ func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *Concu
 	}
 }
 
-func ToMetrics(counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64]) []model.Metrics {
-	var metrics []model.Metrics
+func ToMetrics(counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64]) []*model.Metrics {
+	metrics := make([]*model.Metrics, counters.Len()+gauges.Len())
+	i := 0
 	for k, v := range counters.Copy() {
 		cv := v
 		c := model.NewCounter(k, &cv)
-		metrics = append(metrics, *c)
+		metrics[i] = c
+		i++
 	}
 	for k, v := range gauges.Copy() {
 		gv := v
 		g := model.NewGauge(k, &gv)
-		metrics = append(metrics, *g)
+		metrics[i] = g
+		i++
 	}
 	return metrics
 }

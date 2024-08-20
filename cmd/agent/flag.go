@@ -14,11 +14,16 @@ const (
 	EnvAddress = "ADDRESS"
 )
 
+// AgentConfig describes customization settings for the agent.
 type AgentConfig struct {
-	PollInterval   int    `env:"POLL_INTERVAL"`
-	ReportInterval int    `env:"REPORT_INTERVAL"`
-	Key            string `env:"KEY"`
-	RateLimit      int    `env:"RATE_LIMIT"`
+	// PollInterval - how often to collect metrics from the system.
+	PollInterval int `env:"POLL_INTERVAL"`
+	// ReportInterval - how often to report collected metrics to the server.
+	ReportInterval int `env:"REPORT_INTERVAL"`
+	// Key - used as a secret for a hash function.
+	Key string `env:"KEY"`
+	// RateLimit - limits number of concurrent requests to the server.
+	RateLimit int `env:"RATE_LIMIT"`
 }
 
 func parseFlags() (*mflag.RunAddress, *AgentConfig, error) {
