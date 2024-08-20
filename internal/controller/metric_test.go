@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -218,6 +219,128 @@ func TestMetricHandler_Value(t *testing.T) {
 			router.ServeHTTP(resp, req)
 			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
 			assert.JSONEq(t, tt.wantJSON, resp.Body.String(), "handler returned wrong message")
+		})
+	}
+}
+
+func TestMetricHandler_GetMetricQuery(t *testing.T) {
+	const requestPath = "/value"
+	tests := []struct {
+		name        string
+		queryParams string
+		wantStatus  int
+		wantResp    string
+	}{
+		{
+			name:        "MetricNotFound",
+			queryParams: "/someMetric/hist",
+			wantStatus:  http.StatusNotFound,
+			wantResp:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "CounterNotFound",
+			queryParams: "/counter1/nil",
+			wantStatus:  http.StatusNotFound,
+			wantResp:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "GaugeNotFound",
+			queryParams: "/gauge1/nil",
+			wantStatus:  http.StatusNotFound,
+			wantResp:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "CanGetCounter",
+			queryParams: "/counter/counter0",
+			wantStatus:  http.StatusOK,
+			wantResp:    "10",
+		},
+		{
+			name:        "CanGetGauge",
+			queryParams: "/gauge/gauge0",
+			wantStatus:  http.StatusOK,
+			wantResp:    "25.0",
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	ctx := context.Background()
+	metricStorage := memory.NewMemStorage(ctx, nil)
+	var (
+		counter int64 = 10
+		gauge         = 25.0
+	)
+	_ = metricStorage.Update(ctx, model.NewCounter("counter0", &counter))
+	_ = metricStorage.Update(ctx, model.NewGauge("gauge0", &gauge))
+	metricController := controller.NewMetricController(metricStorage)
+
+	router.POST(requestPath+"/:metricType/:metricName", metricController.GetMetricQuery)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, requestPath+tt.queryParams, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
+			assert.JSONEq(t, tt.wantResp, resp.Body.String(), "handler returned wrong message")
+		})
+	}
+}
+
+func TestMetricHandler_UpdateMetricQuery(t *testing.T) {
+	const requestPath = "/update"
+	var (
+		floatValue = 123.0
+		intValue   = int64(123)
+	)
+
+	tests := []struct {
+		name        string
+		queryParams string
+		wantStatus  int
+		wantResp    string
+	}{
+		{
+			name:        "CounterMetricIsNotFound",
+			queryParams: fmt.Sprintf("/unknown/someCounter/%d", intValue),
+			wantStatus:  http.StatusBadRequest,
+			wantResp:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "GaugeMetricIsNotFound",
+			queryParams: fmt.Sprintf("/unknown/someGauge/%g", floatValue),
+			wantStatus:  http.StatusBadRequest,
+			wantResp:    `{"error": "metric is not found"}`,
+		},
+		{
+			name:        "CanUpdateCounter",
+			queryParams: fmt.Sprintf("/%s/someCounter/%d", model.Counter, intValue),
+			wantStatus:  http.StatusOK,
+			wantResp:    `{"message": "OK"}`,
+		},
+		{
+			name:        "CanUpdateGauge",
+			queryParams: fmt.Sprintf("/%s/someGauge/%g", model.Gauge, floatValue),
+			wantStatus:  http.StatusOK,
+			wantResp:    `{"message": "OK"}`,
+		},
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.Default()
+	metricStorage := memory.NewMemStorage(context.Background(), nil)
+	metricController := controller.NewMetricController(metricStorage)
+
+	router.POST(requestPath+"/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, requestPath+tt.queryParams, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
+			assert.JSONEq(t, tt.wantResp, resp.Body.String(), "handler returned wrong message")
 		})
 	}
 }

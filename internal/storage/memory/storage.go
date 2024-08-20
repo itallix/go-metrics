@@ -32,7 +32,7 @@ func NewMemStorage(ctx context.Context, config *Config) *MemStorage {
 			logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
 		} else {
 			syncer := NewFileSyncer(config, counters, gauges, syncCh)
-			syncer.Start(ctx, config)
+			syncer.Start(ctx)
 		}
 	}
 	return &MemStorage{
