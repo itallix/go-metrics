@@ -75,7 +75,7 @@ func TestMetricHandler_UpdateOne(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 	metricStorage := memory.NewMemStorage(context.Background(), nil)
 	metricController := controller.NewMetricController(metricStorage)
 
@@ -124,7 +124,7 @@ func TestMetricHandler_UpdateBatch(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 	metricStorage := memory.NewMemStorage(context.Background(), nil)
 	metricController := controller.NewMetricController(metricStorage)
 
@@ -192,7 +192,7 @@ func TestMetricHandler_Value(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 	ctx := context.Background()
 	metricStorage := memory.NewMemStorage(ctx, nil)
 	var (
@@ -264,7 +264,7 @@ func TestMetricHandler_GetMetricQuery(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 	ctx := context.Background()
 	metricStorage := memory.NewMemStorage(ctx, nil)
 	var (
@@ -328,7 +328,7 @@ func TestMetricHandler_UpdateMetricQuery(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 	metricStorage := memory.NewMemStorage(context.Background(), nil)
 	metricController := controller.NewMetricController(metricStorage)
 
