@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/caarlos0/env"
+
 	mflag "github.com/itallix/go-metrics/internal/flag"
 )
 
@@ -13,12 +14,18 @@ const (
 	EnvAddress = "ADDRESS"
 )
 
+// ServerConfig describes customization settings for the server.
 type ServerConfig struct {
-	StoreInterval int    `env:"STORE_INTERVAL"`
-	FilePath      string `env:"FILE_STORAGE_PATH"`
-	Restore       bool   `env:"RESTORE"`
-	DatabaseDSN   string `env:"DATABASE_DSN"`
-	Key           string `env:"KEY"`
+	// StoreInterval - how often to store metrics in the file.
+	StoreInterval int `env:"STORE_INTERVAL"`
+	// FilePath - where to store metrics.
+	FilePath string `env:"FILE_STORAGE_PATH"`
+	// Restore - indicates whether the server should load metrics from the file on start.
+	Restore bool `env:"RESTORE"`
+	// DatabaseDSN - db connection string, example: postgresql://username:password@hostname:port/database_name.
+	DatabaseDSN string `env:"DATABASE_DSN"`
+	// Key - used as a secret for a hash function.
+	Key string `env:"KEY"`
 }
 
 func parseFlags() (*mflag.RunAddress, *ServerConfig, error) {

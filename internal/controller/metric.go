@@ -6,28 +6,34 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/itallix/go-metrics/internal/storage"
+	"github.com/gin-gonic/gin"
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
-
-	"github.com/gin-gonic/gin"
+	"github.com/itallix/go-metrics/internal/storage"
 )
 
+// Result used as a JSON response with a message field.
 type Result struct {
 	Message string `json:"message"`
 }
 
+// MetricController implements API handlers for metric requests.
 type MetricController struct {
 	metricsStorage storage.Storage
 }
 
+// NewMetricController constructs new controller instance with a storage for metrics.
 func NewMetricController(metricsStorage storage.Storage) *MetricController {
 	return &MetricController{
 		metricsStorage: metricsStorage,
 	}
 }
 
+// UpdateBatch updates a collection of metrics, expecting the payload in JSON format.
+// The JSON payload should be an array of metric objects.
+// It returns a 400 error if any of the metrics in the array do not conform to the expected model structure,
+// and a 500 error if an error occurs during the save operation.
 func (mc *MetricController) UpdateBatch(c *gin.Context) {
 	var batch []model.Metrics
 	if err := c.BindJSON(&batch); err != nil {
@@ -48,6 +54,9 @@ func (mc *MetricController) UpdateBatch(c *gin.Context) {
 	c.JSON(http.StatusOK, batch)
 }
 
+// UpdateOne updates a single metric, expecting the payload in JSON format.
+// It returns a 400 error if the JSON payload's metric does not conform to the expected model structure,
+// and a 500 error if an error occurs during the save operation.
 func (mc *MetricController) UpdateOne(c *gin.Context) {
 	var metric model.Metrics
 	if err := c.BindJSON(&metric); err != nil {
@@ -67,6 +76,8 @@ func (mc *MetricController) UpdateOne(c *gin.Context) {
 	c.JSON(http.StatusOK, metric)
 }
 
+// GetMetric reads metric details from the storage.
+// It returns 400 in case of incorrect JSON payload and 404 if request metric is not found.
 func (mc *MetricController) GetMetric(c *gin.Context) {
 	var metric model.Metrics
 	if err := c.BindJSON(&metric); err != nil {
@@ -85,6 +96,8 @@ func (mc *MetricController) GetMetric(c *gin.Context) {
 	c.JSON(http.StatusOK, metric)
 }
 
+// ListMetrics returns HTML page with all registred metrics from storage.
+// Returns 500 in case of errors when reading from storage.
 func (mc *MetricController) ListMetrics(c *gin.Context) {
 	const tpl = `
 <html>
@@ -143,12 +156,15 @@ func (mc *MetricController) ListMetrics(c *gin.Context) {
 	}
 }
 
+// MetricQuery used to describe query named parameters for legacy metrics requests.
 type MetricQuery struct {
 	Type  model.MetricType `uri:"metricType,required"`
 	ID    string           `uri:"metricName,required"`
 	Value string           `uri:"metricValue,required"`
 }
 
+// UpdatesMetricQuery updates a metric using query parameters.
+// This is a legacy version of the handler that has been superseded by a JSON-based implementation.
 func (mc *MetricController) UpdateMetricQuery(c *gin.Context) {
 	var query MetricQuery
 	if err := c.ShouldBindUri(&query); err != nil {
@@ -199,6 +215,8 @@ func (mc *MetricController) UpdateMetricQuery(c *gin.Context) {
 	})
 }
 
+// GetMetricQuery reads a metric from a storage using query parameters.
+// This is a legacy version of the handler that has been superseded by a JSON-based implementation.
 func (mc *MetricController) GetMetricQuery(c *gin.Context) {
 	var query MetricQuery
 	if err := c.BindUri(&query); err != nil {

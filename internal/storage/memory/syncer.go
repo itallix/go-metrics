@@ -10,14 +10,11 @@ import (
 	"github.com/itallix/go-metrics/internal/model"
 )
 
+// Config defines start parameters for the sync process.
 type Config struct {
 	filepath string
 	interval int
 	restore  bool
-}
-
-type Syncer interface {
-	Start(ctx context.Context, cfg *Config)
 }
 
 func NewConfig(filepath string, interval int, restore bool) *Config {
@@ -35,7 +32,8 @@ type FileSyncer struct {
 	syncCh   chan int
 }
 
-func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64], syncCh chan int) *FileSyncer {
+func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64],
+	syncCh chan int) *FileSyncer {
 	return &FileSyncer{
 		config:   config,
 		counters: counters,
@@ -44,23 +42,25 @@ func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *Concu
 	}
 }
 
-func ToMetrics(counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64]) []model.Metrics {
-	var metrics []model.Metrics
+func ToMetrics(counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64]) []*model.Metrics {
+	metrics := make([]*model.Metrics, counters.Len()+gauges.Len())
+	i := 0
 	for k, v := range counters.Copy() {
 		cv := v
 		c := model.NewCounter(k, &cv)
-		metrics = append(metrics, *c)
+		metrics[i] = c
+		i++
 	}
 	for k, v := range gauges.Copy() {
 		gv := v
 		g := model.NewGauge(k, &gv)
-		metrics = append(metrics, *g)
+		metrics[i] = g
+		i++
 	}
 	return metrics
 }
 
-func (s *FileSyncer) sync() error {
-	filepath := s.config.filepath
+func (s *FileSyncer) sync(filepath string) error {
 	logger.Log().Infof("Saving metrics to file %s", filepath)
 	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -75,28 +75,28 @@ func (s *FileSyncer) sync() error {
 	return nil
 }
 
-func (s *FileSyncer) Start(ctx context.Context, cfg *Config) {
-	if cfg.restore {
-		if err := s.load(); err != nil {
+func (s *FileSyncer) Start(ctx context.Context) {
+	if s.config.restore {
+		if err := s.load(s.config.filepath); err != nil {
 			logger.Log().Errorf("Error loading metrics from file: %v", err)
 		}
 	}
-	if cfg.interval == 0 {
+	if s.config.interval == 0 {
 		go func() {
 			for range s.syncCh {
-				if err := s.sync(); err != nil {
+				if err := s.sync(s.config.filepath); err != nil {
 					logger.Log().Errorf("Error syncing to the file: %v", err)
 				}
 			}
 		}()
 	} else {
 		go func() {
-			tickerStore := time.NewTicker(time.Duration(cfg.interval) * time.Second)
+			tickerStore := time.NewTicker(time.Duration(s.config.interval) * time.Second)
 			defer tickerStore.Stop()
 			for {
 				select {
 				case <-tickerStore.C:
-					if err := s.sync(); err != nil {
+					if err := s.sync(s.config.filepath); err != nil {
 						logger.Log().Errorf("Error syncing to the file: %v", err)
 					}
 				case <-ctx.Done():
@@ -108,8 +108,7 @@ func (s *FileSyncer) Start(ctx context.Context, cfg *Config) {
 }
 
 // load initializes storage with metric values that have been read from file.
-func (s *FileSyncer) load() error {
-	filepath := s.config.filepath
+func (s *FileSyncer) load(filepath string) error {
 	logger.Log().Infof("Loading metrics from file %s...", filepath)
 	file, err := os.OpenFile(filepath, os.O_RDONLY, 0666)
 	if err != nil {

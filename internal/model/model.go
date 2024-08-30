@@ -2,6 +2,7 @@ package model
 
 import "fmt"
 
+// Metrics describes JSON payload for metrics of different types.
 type Metrics struct {
 	ID    string     `json:"id"`
 	MType MetricType `json:"type"`
@@ -9,13 +10,15 @@ type Metrics struct {
 	Value *float64   `json:"value,omitempty"`
 }
 
+// MetricType is a string-based type reserved for metric types.
 type MetricType string
 
 const (
-	Counter MetricType = "counter"
-	Gauge   MetricType = "gauge"
+	Counter MetricType = "counter" // defines counter metric type with integer values
+	Gauge   MetricType = "gauge"   // defines gauge metric type with float values
 )
 
+// NewCounter constructs new metric instance of type Counter with specified id and value.
 func NewCounter(id string, value *int64) *Metrics {
 	return &Metrics{
 		ID:    id,
@@ -24,6 +27,7 @@ func NewCounter(id string, value *int64) *Metrics {
 	}
 }
 
+// NewGauge constructs new metric instance of type Gauge with specified id and value.
 func NewGauge(id string, value *float64) *Metrics {
 	return &Metrics{
 		ID:    id,
@@ -32,6 +36,8 @@ func NewGauge(id string, value *float64) *Metrics {
 	}
 }
 
+// String gives a string representation of the metric instance.
+// Example: "gauge: g01 = 2.345" or "counter: c01 = 64".
 func (m Metrics) String() string {
 	switch m.MType {
 	case Gauge:

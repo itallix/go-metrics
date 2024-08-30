@@ -1,6 +1,6 @@
 module github.com/itallix/go-metrics
 
-go 1.21.9
+go 1.21
 
 require (
 	github.com/caarlos0/env v3.5.0+incompatible
@@ -23,6 +23,7 @@ require (
 	github.com/cockroachdb/apd v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
+	github.com/gin-contrib/pprof v1.5.0 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

@@ -19,3 +19,11 @@ stop-pg:
 .PHONY: clean-data
 clean-data:
 	sudo rm -rf ./db/data/
+
+.PHONY: lint
+lint:
+	golangci-lint run --fix
+
+.PHONY: pprofdiff
+pprofdiff:
+	go tool pprof -top -diff_base=profiles/base.pprof profiles/result.pprof
