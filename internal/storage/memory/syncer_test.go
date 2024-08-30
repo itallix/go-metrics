@@ -35,7 +35,7 @@ func TestFileSyncer_SyncDelay(t *testing.T) {
 	err = decoder.Decode(&metrics)
 	require.NoError(t, err)
 
-	assert.Equal(t, 2, len(metrics))
+	assert.Len(t, metrics, 2)
 	assert.Equal(t, "c0", metrics[0].ID)
 	assert.Equal(t, "g0", metrics[1].ID)
 }
@@ -66,7 +66,7 @@ func TestFileSyncer_SyncNoDelay(t *testing.T) {
 	err = decoder.Decode(&metrics)
 	require.NoError(t, err)
 
-	assert.Equal(t, 2, len(metrics))
+	assert.Len(t, metrics, 2)
 	assert.Equal(t, "c0", metrics[0].ID)
 	assert.Equal(t, "g0", metrics[1].ID)
 }

@@ -119,7 +119,10 @@ func TestMetricHandler_UpdateBatch(t *testing.T) {
 				*model.NewCounter("someCounter", &intValue),
 			},
 			wantStatus: http.StatusOK,
-			wantJSON:   `[{"id": "someGauge", "type": "gauge", "value": 123.0}, {"id":"someCounter", "type":"counter", "delta":123}]`,
+			wantJSON: `[
+				{"id": "someGauge", "type": "gauge", "value": 123.0}, 
+				{"id":"someCounter", "type":"counter", "delta":123}]
+			`,
 		},
 	}
 
