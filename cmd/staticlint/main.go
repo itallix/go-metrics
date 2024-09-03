@@ -1,3 +1,32 @@
+// Package main provides a multichecker that combines a custom analyzer to
+// disallow the usage of os.Exit in the main package with other common Go
+// static analysis checks. This multichecker helps enforce best practices
+// in Go code by combining several useful checks into one tool.
+//
+// Launch Mechanics:
+//
+// To use this multichecker, follow these steps:
+//
+// 1. Build the multichecker executable:
+//
+//    go build -o multichecker
+//
+// 2. Run the multichecker on your Go code:
+//
+//    ./multichecker ./...
+//
+//    This command will analyze all Go files in the current directory and its
+//    subdirectories.
+//
+// The multichecker combines several analyzers, including:
+//
+// - simple: To simplify single recieve channel operation.
+// - stylecheck: Discourages the use of dot imports.
+// - quickfix: Suggests applying De Morgan's law.
+// - errcheck: Ensures that errors are checked.
+// - bodyclose: Checks that HTTP response bodies are correctly closed.
+// - staticcheck: A comprehensive set of static analysis checks.
+// - Custom OsExitAnalyzer: Disallows the use of os.Exit in the main function of the main package.
 package main
 
 import (
