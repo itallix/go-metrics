@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-contrib/gzip"
@@ -28,6 +29,12 @@ const (
 	IdleTimeoutSeconds  = 15
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
 	if err := logger.Initialize("debug"); err != nil {
 		log.Fatalf("Cannot instantiate zap logger: %s", err)
@@ -37,6 +44,8 @@ func main() {
 			logger.Log().Errorf("Failed to sync logger: %s", deferErr)
 		}
 	}()
+
+	service.PrintBuildInfo(buildVersion, buildDate, buildCommit, os.Stdout)
 
 	addr, serverConfig, err := parseFlags()
 	if err != nil {
