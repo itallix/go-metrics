@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"runtime"
 	"strconv"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/itallix/go-metrics/internal/model"
 )
 
 func TestCollectRuntimeMetrics(t *testing.T) {
@@ -49,4 +52,36 @@ func TestCollectExtraMetrics(t *testing.T) {
 		_, exists := agent.Gauges[metricName]
 		assert.Truef(t, exists, "Expected key %s is missing in the map", metricName)
 	}
+}
+
+func TestSendMetrics(t *testing.T) {
+	client := resty.New()
+	httpmock.ActivateNonDefault(client.GetClient())
+	httpmock.RegisterResponder("POST", "/updates/",
+		httpmock.NewStringResponder(200, `{"status":"success"}`))
+	agent, err := newAgent(client, "")
+	require.NoError(t, err)
+	assert.Empty(t, agent.Gauges)
+
+	err = agent.collectRuntime()
+	require.NoError(t, err)
+
+	jobs := make(chan []model.Metrics, 1)
+	results := make(chan error, 1)
+
+	go func() {
+		jobs <- agent.metrics()
+	}()
+	go func() {
+		agent.send(context.Background(), jobs, results)
+	}()
+
+	err = <-results
+	require.NoError(t, err)
+
+	info := httpmock.GetCallCountInfo()
+	assert.Equal(t, 1, info["POST /updates/"])
+
+	close(jobs)
+	close(results)
 }

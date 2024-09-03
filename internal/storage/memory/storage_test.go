@@ -82,3 +82,14 @@ func TestStorage_Ping(t *testing.T) {
 
 	assert.False(t, s.Ping(ctx))
 }
+
+func TestStorage_New(t *testing.T) {
+	ctx := context.Background()
+	cfg := Config{
+		interval: 0,
+		filepath: "some/path",
+	}
+	s := NewMemStorage(ctx, &cfg)
+
+	assert.NotNil(t, s.syncCh)
+}

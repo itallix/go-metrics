@@ -8,19 +8,19 @@ import (
 )
 
 func TestPrintBuildInfo(t *testing.T) {
-	tests := []struct{
-		name string
+	tests := []struct {
+		name    string
 		version string
-		date string
-		commit string
-		want string
+		date    string
+		commit  string
+		want    string
 	}{
 		{
-			name: "HasInfo",
+			name:    "HasInfo",
 			version: "v1.0.0",
-			date: "2024-08-30",
-			commit: "abcdefg",
-			want: "Build version: v1.0.0\nBuild date: 2024-08-30\nBuild commit: abcdefg\n",
+			date:    "2024-08-30",
+			commit:  "abcdefg",
+			want:    "Build version: v1.0.0\nBuild date: 2024-08-30\nBuild commit: abcdefg\n",
 		},
 		{
 			name: "NoInfo",
@@ -32,7 +32,7 @@ func TestPrintBuildInfo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			PrintBuildInfo(tt.version, tt.date, tt.commit, &buf)
-			assert.Equal(t, tt.want, buf.String())		
+			assert.Equal(t, tt.want, buf.String())
 		})
 	}
 }

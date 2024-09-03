@@ -31,7 +31,7 @@ func parseFlags() (*mflag.RunAddress, *AgentConfig, error) {
 	flag.IntVar(&cfg.PollInterval, "p", 2, "Poll interval in seconds")
 	flag.IntVar(&cfg.ReportInterval, "r", 10, "Report interval in seconds")
 	flag.StringVar(&cfg.Key, "k", "", "Key that will be used to calculate hash")
-	flag.IntVar(&cfg.RateLimit, "l", 3, "Max number of requests to the server")
+	flag.IntVar(&cfg.RateLimit, "l", 3, "Max number of concurrent requests to the server")
 	flag.Parse()
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {
