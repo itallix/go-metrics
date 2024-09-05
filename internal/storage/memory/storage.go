@@ -27,10 +27,12 @@ func NewMemStorage(ctx context.Context, config *Config) *MemStorage {
 	if config != nil {
 		if config.interval == 0 && config.filepath != "" {
 			syncCh = make(chan int)
+		}
+		if config.filepath == "" {
+			logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
+		} else {
 			syncer := NewFileSyncer(config, counters, gauges, syncCh)
 			syncer.Start(ctx)
-		} else if config.filepath == "" {
-			logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
 		}
 	}
 	return &MemStorage{
