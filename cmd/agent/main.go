@@ -13,6 +13,13 @@ import (
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
+	"github.com/itallix/go-metrics/internal/service"
+)
+
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
 )
 
 func main() {
@@ -24,6 +31,8 @@ func main() {
 			logger.Log().Errorf("Failed to sync logger: %s", deferErr)
 		}
 	}()
+
+	service.PrintBuildInfo(buildVersion, buildDate, buildCommit, os.Stdout)
 
 	serverURL, config, err := parseFlags()
 	if err != nil {

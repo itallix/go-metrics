@@ -38,7 +38,7 @@ func TestFlag_Parse(t *testing.T) {
 			assert.Equal(t, tt.wantStoreInterval, cfg.StoreInterval)
 			assert.Equal(t, tt.wantRestore, cfg.Restore)
 			assert.Equal(t, tt.wantKey, cfg.Key)
-			assert.Empty(t, tt.wantDSN, cfg.DatabaseDSN)
+			assert.Equal(t, tt.wantDSN, cfg.DatabaseDSN)
 		})
 	}
 }

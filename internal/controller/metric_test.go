@@ -119,7 +119,21 @@ func TestMetricHandler_UpdateBatch(t *testing.T) {
 				*model.NewCounter("someCounter", &intValue),
 			},
 			wantStatus: http.StatusOK,
-			wantJSON:   `[{"id": "someGauge", "type": "gauge", "value": 123.0}, {"id":"someCounter", "type":"counter", "delta":123}]`,
+			wantJSON: `[
+				{"id": "someGauge", "type": "gauge", "value": 123.0}, 
+				{"id":"someCounter", "type":"counter", "delta":123}]
+			`,
+		},
+		{
+			name: "UpdateBatch_400",
+			givePayload: []model.Metrics{
+				{
+					ID:    "broken",
+					MType: model.Counter,
+					Value: nil,
+				},
+			},
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
@@ -143,7 +157,9 @@ func TestMetricHandler_UpdateBatch(t *testing.T) {
 			resp := httptest.NewRecorder()
 			router.ServeHTTP(resp, req)
 			assert.Equal(t, tt.wantStatus, resp.Code, "handler returned wrong status code")
-			assert.JSONEq(t, tt.wantJSON, resp.Body.String(), "handler returned wrong message")
+			if tt.wantJSON != "" {
+				assert.JSONEq(t, tt.wantJSON, resp.Body.String(), "handler returned wrong message")
+			}
 		})
 	}
 }
@@ -343,4 +359,38 @@ func TestMetricHandler_UpdateMetricQuery(t *testing.T) {
 			assert.JSONEq(t, tt.wantResp, resp.Body.String(), "handler returned wrong message")
 		})
 	}
+}
+
+func TestMetricHandler_List(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	ctx := context.Background()
+	metricStorage := memory.NewMemStorage(ctx, nil)
+	var (
+		counter int64 = 10
+		gauge         = 25.0
+	)
+	_ = metricStorage.Update(ctx, model.NewCounter("counter0", &counter))
+	_ = metricStorage.Update(ctx, model.NewGauge("gauge0", &gauge))
+	metricController := controller.NewMetricController(metricStorage)
+
+	router.GET("/", metricController.ListMetrics)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	assert.Equal(t, 200, resp.Code, "handler returned wrong status code")
+	wantHTML := `
+<html>
+<head>
+	<title>Metrics</title>
+</head>
+<body>
+	<ul>
+		<li>counter0: 10</li>
+		<li>gauge0: 25</li>
+	</ul>
+</body>
+</html>`
+	assert.Equal(t, wantHTML, resp.Body.String(), "handler returned wrong message")
 }

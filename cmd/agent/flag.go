@@ -16,14 +16,10 @@ const (
 
 // AgentConfig describes customization settings for the agent.
 type AgentConfig struct {
-	// PollInterval - how often to collect metrics from the system.
-	PollInterval int `env:"POLL_INTERVAL"`
-	// ReportInterval - how often to report collected metrics to the server.
-	ReportInterval int `env:"REPORT_INTERVAL"`
-	// Key - used as a secret for a hash function.
-	Key string `env:"KEY"`
-	// RateLimit - limits number of concurrent requests to the server.
-	RateLimit int `env:"RATE_LIMIT"`
+	PollInterval   int    `env:"POLL_INTERVAL"`   // How often to collect metrics from the system.
+	ReportInterval int    `env:"REPORT_INTERVAL"` // How often to report collected metrics to the server.
+	Key            string `env:"KEY"`             // Secret for a hash function.
+	RateLimit      int    `env:"RATE_LIMIT"`      // Limits number of concurrent requests to the server.
 }
 
 func parseFlags() (*mflag.RunAddress, *AgentConfig, error) {
@@ -35,7 +31,7 @@ func parseFlags() (*mflag.RunAddress, *AgentConfig, error) {
 	flag.IntVar(&cfg.PollInterval, "p", 2, "Poll interval in seconds")
 	flag.IntVar(&cfg.ReportInterval, "r", 10, "Report interval in seconds")
 	flag.StringVar(&cfg.Key, "k", "", "Key that will be used to calculate hash")
-	flag.IntVar(&cfg.RateLimit, "l", 3, "Max number of requests to the server")
+	flag.IntVar(&cfg.RateLimit, "l", 3, "Max number of concurrent requests to the server")
 	flag.Parse()
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {
