@@ -20,6 +20,7 @@ type AgentConfig struct {
 	ReportInterval int    `env:"REPORT_INTERVAL"` // How often to report collected metrics to the server.
 	Key            string `env:"KEY"`             // Secret for a hash function.
 	RateLimit      int    `env:"RATE_LIMIT"`      // Limits number of concurrent requests to the server.
+	CryptoKey      string `env:"CRYPTO_KEY"`      // Public key used to encrypt request payload.
 }
 
 func parseFlags() (*mflag.RunAddress, *AgentConfig, error) {
@@ -32,6 +33,7 @@ func parseFlags() (*mflag.RunAddress, *AgentConfig, error) {
 	flag.IntVar(&cfg.ReportInterval, "r", 10, "Report interval in seconds")
 	flag.StringVar(&cfg.Key, "k", "", "Key that will be used to calculate hash")
 	flag.IntVar(&cfg.RateLimit, "l", 3, "Max number of concurrent requests to the server")
+	flag.StringVar(&cfg.CryptoKey, "crypto-key", "", "Path to public key that will be used for payload encryption")
 	flag.Parse()
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {

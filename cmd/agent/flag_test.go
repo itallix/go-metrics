@@ -15,6 +15,7 @@ func TestFlag_Parse(t *testing.T) {
 		wantReport    int
 		wantKey       string
 		wantRateLimit int
+		wantCryptoKey string
 	}{
 		{
 			name:          "Default",
@@ -23,6 +24,7 @@ func TestFlag_Parse(t *testing.T) {
 			wantReport:    10,
 			wantKey:       "",
 			wantRateLimit: 3,
+			wantCryptoKey: "",
 		},
 	}
 
@@ -36,6 +38,7 @@ func TestFlag_Parse(t *testing.T) {
 			assert.Equal(t, tt.wantReport, cfg.ReportInterval)
 			assert.Equal(t, tt.wantKey, cfg.Key)
 			assert.Equal(t, tt.wantRateLimit, cfg.RateLimit)
+			assert.Equal(t, tt.wantCryptoKey, cfg.CryptoKey)
 		})
 	}
 }

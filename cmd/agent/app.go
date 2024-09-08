@@ -26,6 +26,7 @@ import (
 
 const (
 	requestTimeoutSeconds = 10
+	clientCert            = "client.pem"
 )
 
 var RuntimeMetrics = []string{
@@ -44,9 +45,10 @@ type agent struct {
 	RetryDelays []time.Duration
 	mu          sync.RWMutex
 	cpuCount    int
+	cryptoKey   string
 }
 
-func newAgent(client *resty.Client, secretKey string) (*agent, error) {
+func newAgent(client *resty.Client, secretKey string, cryptoKey string) (*agent, error) {
 	var hashService service.HashService
 	if secretKey != "" {
 		hashService = service.NewHashService(secretKey)
@@ -62,6 +64,7 @@ func newAgent(client *resty.Client, secretKey string) (*agent, error) {
 		HashService: hashService,
 		RetryDelays: []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
 		cpuCount:    cpuCount,
+		cryptoKey:   cryptoKey,
 	}, nil
 }
 
@@ -125,19 +128,33 @@ func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results c
 		logger.Log().Info("Processing job with batch of metrics")
 		// Use encoder to pass autotests
 		var buf bytes.Buffer
-		gz := gzip.NewWriter(&buf)
+		gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		if err != nil {
+			results <- err
+			return
+		}
 		encoder := json.NewEncoder(gz)
 		if err := encoder.Encode(metrics); err != nil {
 			results <- err
+			return
 		}
 		if err := gz.Close(); err != nil {
 			results <- err
+			return
+		}
+		if m.cryptoKey != "" {
+			if encoded, err := service.EncryptData(buf.Bytes(), clientCert); err != nil {
+				results <- err
+				return
+			} else {
+				buf.Reset()
+				buf.Write(encoded)
+			}
 		}
 
-		var (
-			err  error
-			resp *resty.Response
-		)
+		logger.Log().Infof("sending encrypted data: %v", buf.Bytes())
+
+		var resp *resty.Response
 		request := m.Client.R().
 			SetHeader("Content-Encoding", "gzip").
 			SetBody(buf.Bytes())
@@ -160,6 +177,7 @@ func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results c
 
 		if err != nil {
 			results <- err
+			return
 		}
 
 		if resp.StatusCode() == http.StatusOK {

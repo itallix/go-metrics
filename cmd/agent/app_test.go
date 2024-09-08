@@ -17,7 +17,7 @@ import (
 func TestCollectRuntimeMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	agent, err := newAgent(client, "")
+	agent, err := newAgent(client, "", "")
 	require.NoError(t, err)
 
 	assert.Empty(t, agent.Gauges)
@@ -35,7 +35,7 @@ func TestCollectRuntimeMetrics(t *testing.T) {
 func TestCollectExtraMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	agent, err := newAgent(client, "")
+	agent, err := newAgent(client, "", "")
 	require.NoError(t, err)
 	assert.Empty(t, agent.Gauges)
 
@@ -59,7 +59,7 @@ func TestSendMetrics(t *testing.T) {
 	httpmock.ActivateNonDefault(client.GetClient())
 	httpmock.RegisterResponder("POST", "/updates/",
 		httpmock.NewStringResponder(200, `{"status":"success"}`))
-	agent, err := newAgent(client, "")
+	agent, err := newAgent(client, "", "")
 	require.NoError(t, err)
 	assert.Empty(t, agent.Gauges)
 

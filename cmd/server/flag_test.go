@@ -16,6 +16,7 @@ func TestFlag_Parse(t *testing.T) {
 		wantRestore       bool
 		wantKey           string
 		wantDSN           string
+		wantCryptoKey     string
 	}{
 		{
 			name:              "Default",
@@ -25,6 +26,7 @@ func TestFlag_Parse(t *testing.T) {
 			wantRestore:       true,
 			wantKey:           "",
 			wantDSN:           "",
+			wantCryptoKey:     "",
 		},
 	}
 
@@ -39,6 +41,7 @@ func TestFlag_Parse(t *testing.T) {
 			assert.Equal(t, tt.wantRestore, cfg.Restore)
 			assert.Equal(t, tt.wantKey, cfg.Key)
 			assert.Equal(t, tt.wantDSN, cfg.DatabaseDSN)
+			assert.Equal(t, tt.wantCryptoKey, cfg.CryptoKey)
 		})
 	}
 }

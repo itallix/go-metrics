@@ -51,7 +51,7 @@ func main() {
 
 	client := resty.New().SetBaseURL("http://"+serverURL.String()).
 		SetHeader("Content-Type", "application/json")
-	metricsAgent, err := newAgent(client, config.Key)
+	metricsAgent, err := newAgent(client, config.Key, config.CryptoKey)
 	if err != nil {
 		logger.Log().Fatalf("Failed to instantiate agent: %v", err)
 	}

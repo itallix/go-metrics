@@ -21,6 +21,7 @@ type ServerConfig struct {
 	Restore       bool   `env:"RESTORE"`           // Should the metrics be loaded from the file on start?
 	DatabaseDSN   string `env:"DATABASE_DSN"`      // DB connection string, example: postgresql://username:password@hostname:port/database_name.
 	Key           string `env:"KEY"`               // Secret for a hash function.
+	CryptoKey     string `env:"CRYPTO_KEY"`        // Private key used to decrypt request payload.
 }
 
 func parseFlags() (*mflag.RunAddress, *ServerConfig, error) {
@@ -34,6 +35,7 @@ func parseFlags() (*mflag.RunAddress, *ServerConfig, error) {
 	flag.BoolVar(&cfg.Restore, "r", true, "Whether server needs to restore metrics from file or not")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "Database connection string")
 	flag.StringVar(&cfg.Key, "k", "", "Key that will be used to calculate hash")
+	flag.StringVar(&cfg.CryptoKey, "crypto-key", "", "Private key that will be used to decrypt the request payload")
 	flag.Parse()
 
 	if envAddr := os.Getenv(EnvAddress); envAddr != "" {

@@ -58,6 +58,9 @@ func main() {
 	if serverConfig.Key != "" {
 		router.Use(middleware.VerifyHash(service.NewHashService(serverConfig.Key)))
 	}
+	if serverConfig.CryptoKey != "" {
+		router.Use(middleware.DecryptMiddleware(serverConfig.CryptoKey))
+	}
 	router.Use(gzip.Gzip(gzip.BestCompression))
 	router.Use(middleware.GzipDecompress())
 
