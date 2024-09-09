@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFlag_Parse(t *testing.T) {
+func TestServerConfig_Parse(t *testing.T) {
 	tests := []struct {
 		name              string
 		wantAddr          string
