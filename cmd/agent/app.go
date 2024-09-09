@@ -152,8 +152,6 @@ func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results c
 			}
 		}
 
-		logger.Log().Infof("sending encrypted data: %v", buf.Bytes())
-
 		var resp *resty.Response
 		request := m.Client.R().
 			SetHeader("Content-Encoding", "gzip").

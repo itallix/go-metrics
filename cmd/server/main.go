@@ -47,7 +47,7 @@ func main() {
 
 	service.PrintBuildInfo(buildVersion, buildDate, buildCommit, os.Stdout)
 
-	addr, serverConfig, err := parseFlags()
+	serverConfig, err := parseConfig()
 	if err != nil {
 		logger.Log().Errorf("Can't parse flags: %v", err.Error())
 	}
@@ -97,14 +97,14 @@ func main() {
 	pprof.Register(router)
 
 	server := &http.Server{
-		Addr:         addr.String(),
+		Addr:         serverConfig.Address,
 		Handler:      router,
 		ReadTimeout:  ReadTimeoutSeconds * time.Second,
 		WriteTimeout: WriteTimeoutSeconds * time.Second,
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
 
-	logger.Log().Infof("Server is starting on %s...", addr)
+	logger.Log().Infof("Server is starting on %s...", serverConfig.Address)
 	if err = server.ListenAndServe(); err != nil {
 		logger.Log().Fatalf("Error starting server: %v", err)
 	}

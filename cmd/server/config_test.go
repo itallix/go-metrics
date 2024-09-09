@@ -32,10 +32,10 @@ func TestFlag_Parse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			addr, cfg, err := parseFlags()
+			cfg, err := parseConfig()
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.wantAddr, addr.String())
+			assert.Equal(t, tt.wantAddr, cfg.Address)
 			assert.Equal(t, tt.wantFilepath, cfg.FilePath)
 			assert.Equal(t, tt.wantStoreInterval, cfg.StoreInterval)
 			assert.Equal(t, tt.wantRestore, cfg.Restore)

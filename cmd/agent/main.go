@@ -34,7 +34,7 @@ func main() {
 
 	service.PrintBuildInfo(buildVersion, buildDate, buildCommit, os.Stdout)
 
-	serverURL, config, err := parseFlags()
+	config, err := parseConfig()
 	if err != nil {
 		logger.Log().Fatalf("Cannot parse flags: %v", err)
 	}
@@ -49,7 +49,7 @@ func main() {
 	reportPoll := time.NewTicker(time.Duration(config.ReportInterval) * time.Second)
 	defer reportPoll.Stop()
 
-	client := resty.New().SetBaseURL("http://"+serverURL.String()).
+	client := resty.New().SetBaseURL("http://"+config.ServerURL).
 		SetHeader("Content-Type", "application/json")
 	metricsAgent, err := newAgent(client, config.Key, config.CryptoKey)
 	if err != nil {

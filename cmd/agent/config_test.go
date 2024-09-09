@@ -30,10 +30,10 @@ func TestFlag_Parse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			addr, cfg, err := parseFlags()
+			cfg, err := parseConfig()
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.wantAddr, addr.String())
+			assert.Equal(t, tt.wantAddr, cfg.ServerURL)
 			assert.Equal(t, tt.wantPoll, cfg.PollInterval)
 			assert.Equal(t, tt.wantReport, cfg.ReportInterval)
 			assert.Equal(t, tt.wantKey, cfg.Key)
