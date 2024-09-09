@@ -4,6 +4,7 @@ import (
 	"context"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -68,14 +69,16 @@ func TestSendMetrics(t *testing.T) {
 
 	jobs := make(chan []model.Metrics, 1)
 	results := make(chan error, 1)
+	var wg sync.WaitGroup
 
 	go func() {
 		jobs <- agent.metrics()
 	}()
 	go func() {
-		agent.send(context.Background(), jobs, results)
+		agent.send(context.Background(), &wg, jobs, results)
 	}()
 
+	wg.Wait()
 	err = <-results
 	require.NoError(t, err)
 

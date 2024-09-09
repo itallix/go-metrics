@@ -123,7 +123,8 @@ func (m *agent) collectExtra() error {
 	return err
 }
 
-func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results chan<- error) {
+func (m *agent) send(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []model.Metrics, results chan<- error) {
+	defer wg.Done()
 	for metrics := range jobs {
 		logger.Log().Info("Processing job with batch of metrics")
 		// Use encoder to pass autotests
@@ -131,21 +132,21 @@ func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results c
 		gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 		if err != nil {
 			results <- err
-			return
+			continue
 		}
 		encoder := json.NewEncoder(gz)
 		if err := encoder.Encode(metrics); err != nil {
 			results <- err
-			return
+			continue
 		}
 		if err := gz.Close(); err != nil {
 			results <- err
-			return
+			continue
 		}
 		if m.cryptoKey != "" {
 			if encoded, err := service.EncryptData(buf.Bytes(), clientCert); err != nil {
 				results <- err
-				return
+				continue
 			} else {
 				buf.Reset()
 				buf.Write(encoded)
@@ -175,7 +176,7 @@ func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results c
 
 		if err != nil {
 			results <- err
-			return
+			continue
 		}
 
 		if resp.StatusCode() == http.StatusOK {

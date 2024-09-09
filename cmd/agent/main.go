@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,7 +40,8 @@ func main() {
 		logger.Log().Fatalf("Cannot parse flags: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	mainCtx := context.Background()
+	ctx, cancel := context.WithCancel(mainCtx)
 
 	jobs := make(chan []model.Metrics, config.RateLimit)
 	results := make(chan error, config.RateLimit)
@@ -56,10 +58,14 @@ func main() {
 		logger.Log().Fatalf("Failed to instantiate agent: %v", err)
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(config.RateLimit)
+
 	for i := 0; i < config.RateLimit; i++ {
-		go metricsAgent.send(ctx, jobs, results)
+		go metricsAgent.send(mainCtx, &wg, jobs, results)
 	}
 
+	// this goroutine monitors results from workers and logs the status of the job
 	go func() {
 		for err := range results {
 			if err != nil {
@@ -92,10 +98,18 @@ func main() {
 	}()
 
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
 	<-quit
+
 	logger.Log().Info("Shutting down agent gracefully...")
-	close(jobs)
-	close(results)
 	cancel()
+	// if there are unsent metrics in agent, schedule the last job with collected metrics
+	if metricsAgent.Counter > 0 {
+		logger.Log().Info("Scheduling new job to send metrics due to graceful shutdown...")
+		jobs <- metricsAgent.metrics()
+	}
+	close(jobs)
+	// waiting for all workers that send metrics to the server to finish
+	wg.Wait()
+	close(results)
 }
