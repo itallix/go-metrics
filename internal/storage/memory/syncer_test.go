@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,8 +27,9 @@ func TestFileSyncer_SyncDelay(t *testing.T) {
 	gauges := NewConcurrentMap[float64](1)
 	gauges.Set("g0", 64.0)
 
+	var wg sync.WaitGroup
 	syncer := NewFileSyncer(cfg, counters, gauges, nil)
-	syncer.Start(context.Background())
+	syncer.Start(context.Background(), &wg)
 
 	time.Sleep(2 * time.Second) // to wait syncer with delay=1
 	decoder := json.NewDecoder(f)
@@ -55,8 +57,9 @@ func TestFileSyncer_SyncNoDelay(t *testing.T) {
 	syncCh := make(chan int)
 	defer close(syncCh)
 
+	var wg sync.WaitGroup
 	syncer := NewFileSyncer(cfg, counters, gauges, syncCh)
-	syncer.Start(context.Background())
+	syncer.Start(context.Background(), &wg)
 
 	syncCh <- 1
 
@@ -77,8 +80,9 @@ func TestFileSyncer_Load(t *testing.T) {
 	counters := NewConcurrentMap[int64](1)
 	gauges := NewConcurrentMap[float64](1)
 
+	var wg sync.WaitGroup
 	syncer := NewFileSyncer(cfg, counters, gauges, nil)
-	syncer.Start(context.Background())
+	syncer.Start(context.Background(), &wg)
 
 	c, exists := counters.Get("C1")
 	assert.True(t, exists)

@@ -69,22 +69,17 @@ func TestSendMetrics(t *testing.T) {
 
 	jobs := make(chan []model.Metrics, 1)
 	results := make(chan error, 1)
+
+	jobs <- agent.metrics()
 	var wg sync.WaitGroup
-
-	go func() {
-		jobs <- agent.metrics()
-	}()
-	go func() {
-		agent.send(context.Background(), &wg, jobs, results)
-	}()
-
+	wg.Add(1)
+	go agent.send(context.Background(), &wg, jobs, results)
+	close(jobs)
 	wg.Wait()
+	close(results)
 	err = <-results
 	require.NoError(t, err)
 
 	info := httpmock.GetCallCountInfo()
 	assert.Equal(t, 1, info["POST /updates/"])
-
-	close(jobs)
-	close(results)
 }

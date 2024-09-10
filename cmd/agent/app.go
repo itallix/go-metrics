@@ -135,22 +135,22 @@ func (m *agent) send(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []mode
 			continue
 		}
 		encoder := json.NewEncoder(gz)
-		if err := encoder.Encode(metrics); err != nil {
+		if err = encoder.Encode(metrics); err != nil {
 			results <- err
 			continue
 		}
-		if err := gz.Close(); err != nil {
+		if err = gz.Close(); err != nil {
 			results <- err
 			continue
 		}
 		if m.cryptoKey != "" {
-			if encoded, err := service.EncryptData(buf.Bytes(), clientCert); err != nil {
+			encoded, err := service.EncryptData(buf.Bytes(), clientCert)
+			if err != nil {
 				results <- err
 				continue
-			} else {
-				buf.Reset()
-				buf.Write(encoded)
 			}
+			buf.Reset()
+			buf.Write(encoded)
 		}
 
 		var resp *resty.Response

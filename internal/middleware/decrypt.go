@@ -16,7 +16,7 @@ func DecryptMiddleware(privateKeyPath string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		encryptedData, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, errors.New("failed to read request body"))
+			_ = c.AbortWithError(http.StatusBadRequest, errors.New("failed to read request body"))
 			return
 		}
 
@@ -24,7 +24,7 @@ func DecryptMiddleware(privateKeyPath string) gin.HandlerFunc {
 			decryptedData, err := service.DecryptData(encryptedData, privateKeyPath)
 			if err != nil {
 				logger.Log().Errorf("Error decrypting the request payload %v", err)
-				c.AbortWithError(http.StatusInternalServerError, errors.New("failed to decrypt data"))
+				_ = c.AbortWithError(http.StatusInternalServerError, errors.New("failed to decrypt data"))
 				return
 			}
 

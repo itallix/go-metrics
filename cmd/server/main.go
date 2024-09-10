@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/gzip"
@@ -24,9 +27,10 @@ import (
 )
 
 const (
-	ReadTimeoutSeconds  = 5
-	WriteTimeoutSeconds = 10
-	IdleTimeoutSeconds  = 15
+	ReadTimeoutSeconds     = 5
+	WriteTimeoutSeconds    = 10
+	IdleTimeoutSeconds     = 15
+	ShutdownTimeoutSeconds = 10
 )
 
 var (
@@ -64,18 +68,21 @@ func main() {
 	router.Use(gzip.Gzip(gzip.BestCompression))
 	router.Use(middleware.GzipDecompress())
 
-	ctx := context.Background()
-	var mStorage storage.Storage
+	ctx, cancel := context.WithCancel(context.Background())
+	var (
+		mStorage storage.Storage
+		wg       sync.WaitGroup
+	)
 	if serverConfig.DatabaseDSN != "" {
 		mStorage, err = db.NewPgStorage(ctx, serverConfig.DatabaseDSN)
 		if err != nil {
 			logger.Log().Errorf("Cannot instantiate DB: %v", err)
-			mStorage = memory.NewMemStorage(ctx, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
+			mStorage = memory.NewMemStorage(ctx, &wg, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
 				serverConfig.Restore))
 		}
 	}
 	if mStorage == nil {
-		mStorage = memory.NewMemStorage(ctx, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
+		mStorage = memory.NewMemStorage(ctx, &wg, memory.NewConfig(serverConfig.FilePath, serverConfig.StoreInterval,
 			serverConfig.Restore))
 	}
 	defer mStorage.Close()
@@ -104,8 +111,22 @@ func main() {
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
 
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
+	go func() {
+		<-quit
+		logger.Log().Info("Shutting down server gracefully...")
+		cancel()
+		wg.Wait()
+		ctx, cancelTimeout := context.WithTimeout(context.Background(), ShutdownTimeoutSeconds*time.Second)
+		defer cancelTimeout()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Fatal("Server Shutdown:", err)
+		}
+	}()
+
 	logger.Log().Infof("Server is starting on %s...", serverConfig.Address)
-	if err = server.ListenAndServe(); err != nil {
+	if err = server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Log().Fatalf("Error starting server: %v", err)
 	}
 }
