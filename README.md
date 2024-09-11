@@ -1,6 +1,6 @@
 # go-metrics
 
-My pet project to learn Golang with Yandex Practicum [Advanced Go Developer](https://practicum.yandex.ru/go-advanced/) course
+My pet project to learn Golang with Yandex Practicum [Advanced Go Developer](https://practicum.yandex.ru/go-advanced/) course.
 
 ## Overview
 

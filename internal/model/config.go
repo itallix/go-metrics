@@ -1,9 +1,12 @@
 package model
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 )
 
 // ServerConfig describes customization settings for the server.
@@ -29,13 +32,33 @@ type AgentConfig struct {
 	CryptoKey      string `env:"CRYPTO_KEY" json:"crypto_key"`           // Public key used to encrypt request payload.
 }
 
+var re = regexp.MustCompile(`("\w*_interval"):\s*"(\d+)s`)
+
 // ParseFileConfig used to read configuration for server or agent from the specified JSON file.
 func ParseFileConfig[T ServerConfig | AgentConfig](path string, cfg *T) error {
-	cfgBytes, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("cannot open config file: %w", err)
 	}
-	if err := json.Unmarshal(cfgBytes, &cfg); err != nil {
+
+	// In the Config struct, intervals are represented as integer values (int)
+	// In the JSON configuration, intervals may be strings with a suffix (e.g., "5s")
+	// Use a scanner to read JSON line by line, then extract and convert
+	// numeric values from strings, ignoring unit suffixes
+	scanner := bufio.NewScanner(f)
+	var jsonBuilder strings.Builder
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := re.FindStringSubmatch(line)
+		if len(matches) > 2 {
+			jsonBuilder.WriteString(fmt.Sprintf("%s: %s,", matches[1], matches[2]))
+		} else {
+			jsonBuilder.WriteString(line)
+		}
+	}
+
+	jsonString := jsonBuilder.String()
+	if err := json.Unmarshal([]byte(jsonString), &cfg); err != nil {
 		return fmt.Errorf("cannot parse config file: %w", err)
 	}
 	return nil
