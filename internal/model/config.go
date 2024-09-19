@@ -11,7 +11,6 @@ import (
 
 // ServerConfig describes customization settings for the server.
 type ServerConfig struct {
-	ConfigPath    string `env:"CONFIG"`                               // Path to json config file.
 	Address       string `env:"ADDRESS" json:"address"`               // Address where server will be started.
 	StoreInterval int    `env:"STORE_INTERVAL" json:"store_interval"` // How often to store metrics in the file.
 	FilePath      string `env:"FILE_STORAGE_PATH" json:"store_file"`  // Location where to store metrics.
@@ -23,7 +22,6 @@ type ServerConfig struct {
 
 // AgentConfig describes customization settings for the agent.
 type AgentConfig struct {
-	ConfigPath     string `env:"CONFIG"`                                 // Path to json config file.
 	ServerURL      string `env:"ADDRESS" json:"address"`                 // Address of the server to send metrics to.
 	PollInterval   int    `env:"POLL_INTERVAL" json:"poll_interval"`     // How often to collect metrics from the system.
 	ReportInterval int    `env:"REPORT_INTERVAL" json:"report_interval"` // How often to report collected metrics to the server.

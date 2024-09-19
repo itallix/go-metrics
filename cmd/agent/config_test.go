@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,7 @@ import (
 func TestAgentConfig_Parse(t *testing.T) {
 	tests := []struct {
 		name          string
+		giveArgs 	  []string
 		wantAddr      string
 		wantPoll      int
 		wantReport    int
@@ -26,10 +29,24 @@ func TestAgentConfig_Parse(t *testing.T) {
 			wantRateLimit: 3,
 			wantCryptoKey: "",
 		},
+		{
+			name:          "WithArgs",
+			giveArgs: 	   []string{"-a", "localhost:8081", "-p", "4", "-r", "20", "-k", "key", "-l", "5", "-crypto-key", "cryptoKey"},
+			wantAddr:      "localhost:8081",
+			wantPoll:      4,
+			wantReport:    20,
+			wantKey:       "key",
+			wantRateLimit: 5,
+			wantCryptoKey: "cryptoKey",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+			if tt.giveArgs != nil {
+				os.Args = append([]string{os.Args[0]}, tt.giveArgs...)
+			}
 			cfg, err := parseConfig()
 			require.NoError(t, err)
 

@@ -8,27 +8,58 @@ import (
 	"github.com/itallix/go-metrics/internal/model"
 )
 
+const (
+	defaultServerURL = "localhost:8080"
+	defaultPollInterval = 2
+	defaultReportInterval = 10
+	defaultRateLimit = 3
+)
+
 func parseConfig() (*model.AgentConfig, error) {
-	var cfg model.AgentConfig
-	flag.StringVar(&cfg.ConfigPath, "config", "", "Path to config file")
-	flag.StringVar(&cfg.ConfigPath, "c", "", "Path to config file (shorthand)")
-	flag.StringVar(&cfg.ServerURL, "a", "localhost:8080", "Net address host:port")
-	flag.IntVar(&cfg.PollInterval, "p", 2, "Poll interval in seconds")
-	flag.IntVar(&cfg.ReportInterval, "r", 10, "Report interval in seconds")
-	flag.StringVar(&cfg.Key, "k", cfg.Key, "Key that will be used to calculate hash")
-	flag.IntVar(&cfg.RateLimit, "l", 3, "Max number of concurrent requests to the server")
-	flag.StringVar(&cfg.CryptoKey, "crypto-key", cfg.CryptoKey, "Path to public key that will be used for payload encryption")
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "Path to config file")
+	flag.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
+
+	serverURL := flag.String("a", defaultServerURL, "Net address host:port")
+	pollInterval := flag.Int("p", defaultPollInterval, "Poll interval in seconds")
+	reportInterval := flag.Int("r", defaultReportInterval, "Report interval in seconds")
+	key := flag.String("k", "", "Key that will be used to calculate hash")
+	rateLimit := flag.Int("l", defaultRateLimit, "Max number of concurrent requests to the server")
+	cryptoKey := flag.String("crypto-key", "", "Path to public key that will be used for payload encryption")
 	flag.Parse()
 
-	if err := env.Parse(&cfg); err != nil {
-		return nil, err
+	cfg := model.AgentConfig{
+		ServerURL: defaultServerURL,
+		PollInterval: defaultPollInterval,
+		ReportInterval: defaultReportInterval,
+		RateLimit: defaultRateLimit,
 	}
-
-	if cfg.ConfigPath != "" {
-		err := model.ParseFileConfig(cfg.ConfigPath, &cfg)
+	if configPath != "" {
+		err := model.ParseFileConfig(configPath, &cfg)
 		if err != nil {
 			return nil, err
 		}
+	}
+	if *serverURL != defaultServerURL {
+		cfg.ServerURL = *serverURL
+	}
+	if *pollInterval != defaultPollInterval {
+		cfg.PollInterval = *pollInterval
+	}
+	if *reportInterval != defaultReportInterval {
+		cfg.ReportInterval = *reportInterval
+	}
+	if *rateLimit != defaultRateLimit {
+		cfg.RateLimit = *rateLimit
+	}
+	if *key != "" {
+		cfg.Key = *key
+	}
+	if *cryptoKey != "" {
+		cfg.CryptoKey = *cryptoKey
+	}
+	if err := env.Parse(&cfg); err != nil {
+		return nil, err
 	}
 	return &cfg, nil
 }
