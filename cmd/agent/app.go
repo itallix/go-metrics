@@ -26,6 +26,7 @@ import (
 
 const (
 	requestTimeoutSeconds = 10
+	clientCert            = "client.pem"
 )
 
 var RuntimeMetrics = []string{
@@ -44,9 +45,10 @@ type agent struct {
 	RetryDelays []time.Duration
 	mu          sync.RWMutex
 	cpuCount    int
+	cryptoKey   string
 }
 
-func newAgent(client *resty.Client, secretKey string) (*agent, error) {
+func newAgent(client *resty.Client, secretKey string, cryptoKey string) (*agent, error) {
 	var hashService service.HashService
 	if secretKey != "" {
 		hashService = service.NewHashService(secretKey)
@@ -62,6 +64,7 @@ func newAgent(client *resty.Client, secretKey string) (*agent, error) {
 		HashService: hashService,
 		RetryDelays: []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
 		cpuCount:    cpuCount,
+		cryptoKey:   cryptoKey,
 	}, nil
 }
 
@@ -120,24 +123,37 @@ func (m *agent) collectExtra() error {
 	return err
 }
 
-func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results chan<- error) {
+func (m *agent) send(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []model.Metrics, results chan<- error) {
+	defer wg.Done()
 	for metrics := range jobs {
 		logger.Log().Info("Processing job with batch of metrics")
 		// Use encoder to pass autotests
 		var buf bytes.Buffer
-		gz := gzip.NewWriter(&buf)
-		encoder := json.NewEncoder(gz)
-		if err := encoder.Encode(metrics); err != nil {
+		gz, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		if err != nil {
 			results <- err
+			continue
 		}
-		if err := gz.Close(); err != nil {
+		encoder := json.NewEncoder(gz)
+		if err = encoder.Encode(metrics); err != nil {
 			results <- err
+			continue
+		}
+		if err = gz.Close(); err != nil {
+			results <- err
+			continue
+		}
+		if m.cryptoKey != "" {
+			encoded, err := service.EncryptData(buf.Bytes(), clientCert)
+			if err != nil {
+				results <- err
+				continue
+			}
+			buf.Reset()
+			buf.Write(encoded)
 		}
 
-		var (
-			err  error
-			resp *resty.Response
-		)
+		var resp *resty.Response
 		request := m.Client.R().
 			SetHeader("Content-Encoding", "gzip").
 			SetBody(buf.Bytes())
@@ -160,6 +176,7 @@ func (m *agent) send(ctx context.Context, jobs <-chan []model.Metrics, results c
 
 		if err != nil {
 			results <- err
+			continue
 		}
 
 		if resp.StatusCode() == http.StatusOK {

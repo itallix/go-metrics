@@ -4,6 +4,7 @@ import (
 	"context"
 	"runtime"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -17,7 +18,7 @@ import (
 func TestCollectRuntimeMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	agent, err := newAgent(client, "")
+	agent, err := newAgent(client, "", "")
 	require.NoError(t, err)
 
 	assert.Empty(t, agent.Gauges)
@@ -35,7 +36,7 @@ func TestCollectRuntimeMetrics(t *testing.T) {
 func TestCollectExtraMetrics(t *testing.T) {
 	client := resty.New()
 	httpmock.ActivateNonDefault(client.GetClient())
-	agent, err := newAgent(client, "")
+	agent, err := newAgent(client, "", "")
 	require.NoError(t, err)
 	assert.Empty(t, agent.Gauges)
 
@@ -59,7 +60,7 @@ func TestSendMetrics(t *testing.T) {
 	httpmock.ActivateNonDefault(client.GetClient())
 	httpmock.RegisterResponder("POST", "/updates/",
 		httpmock.NewStringResponder(200, `{"status":"success"}`))
-	agent, err := newAgent(client, "")
+	agent, err := newAgent(client, "", "")
 	require.NoError(t, err)
 	assert.Empty(t, agent.Gauges)
 
@@ -69,19 +70,16 @@ func TestSendMetrics(t *testing.T) {
 	jobs := make(chan []model.Metrics, 1)
 	results := make(chan error, 1)
 
-	go func() {
-		jobs <- agent.metrics()
-	}()
-	go func() {
-		agent.send(context.Background(), jobs, results)
-	}()
-
+	jobs <- agent.metrics()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go agent.send(context.Background(), &wg, jobs, results)
+	close(jobs)
+	wg.Wait()
+	close(results)
 	err = <-results
 	require.NoError(t, err)
 
 	info := httpmock.GetCallCountInfo()
 	assert.Equal(t, 1, info["POST /updates/"])
-
-	close(jobs)
-	close(results)
 }

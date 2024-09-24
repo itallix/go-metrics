@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"sync"
 
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
@@ -19,20 +20,20 @@ type MemStorage struct {
 	syncCh   chan int
 }
 
-func NewMemStorage(ctx context.Context, config *Config) *MemStorage {
+func NewMemStorage(ctx context.Context, wg *sync.WaitGroup, config *Config) *MemStorage {
 	var syncCh chan int
 	counters := NewConcurrentMap[int64](DefaultCounterCapacity)
 	gauges := NewConcurrentMap[float64](DefaultGaugeCapacity)
 
 	if config != nil {
-		if config.interval == 0 && config.filepath != "" {
-			syncCh = make(chan int)
-		}
 		if config.filepath == "" {
 			logger.Log().Info("Filepath is not defined. Server will proceed in memory mode.")
 		} else {
+			if config.interval == 0 {
+				syncCh = make(chan int)
+			}
 			syncer := NewFileSyncer(config, counters, gauges, syncCh)
-			syncer.Start(ctx)
+			syncer.Start(ctx, wg)
 		}
 	}
 	return &MemStorage{

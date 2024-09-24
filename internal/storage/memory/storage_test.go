@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,7 @@ import (
 
 func TestStorage_Update(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemStorage(ctx, nil)
+	s := NewMemStorage(ctx, nil, nil)
 	c, g := int64(64), float64(64)
 	err := s.Update(ctx, model.NewCounter("c0", &c))
 	require.NoError(t, err)
@@ -29,7 +30,8 @@ func TestStorage_Update(t *testing.T) {
 
 func TestStorage_UpdateBatch(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemStorage(ctx, nil)
+	var wg sync.WaitGroup
+	s := NewMemStorage(ctx, &wg, nil)
 	c, g := int64(64), float64(64)
 	metrics := []model.Metrics{*model.NewCounter("c0", &c), *model.NewGauge("g0", &g)}
 	err := s.UpdateBatch(ctx, metrics)
@@ -45,7 +47,7 @@ func TestStorage_UpdateBatch(t *testing.T) {
 
 func TestStorage_Read(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemStorage(ctx, nil)
+	s := NewMemStorage(ctx, nil, nil)
 	c, g := int64(64), float64(64)
 	metrics := []model.Metrics{*model.NewCounter("c0", &c), *model.NewGauge("g0", &g)}
 	err := s.UpdateBatch(ctx, metrics)
@@ -78,7 +80,7 @@ func TestStorage_Read(t *testing.T) {
 
 func TestStorage_Ping(t *testing.T) {
 	ctx := context.Background()
-	s := NewMemStorage(ctx, nil)
+	s := NewMemStorage(ctx, nil, nil)
 
 	assert.False(t, s.Ping(ctx))
 }
@@ -89,7 +91,8 @@ func TestStorage_New(t *testing.T) {
 		interval: 0,
 		filepath: "some/path",
 	}
-	s := NewMemStorage(ctx, &cfg)
+	var wg sync.WaitGroup
+	s := NewMemStorage(ctx, &wg, &cfg)
 
 	assert.NotNil(t, s.syncCh)
 }

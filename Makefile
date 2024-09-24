@@ -35,3 +35,7 @@ build-agent:
 .PHONY: build-server
 build-server:
 	go build -o build/server -ldflags "-X main.buildVersion=v1.0.0 -X main.buildDate=$$(date +%Y-%m-%d) -X main.buildCommit=$$(git rev-parse HEAD)" ./cmd/server
+
+.PHONY: test
+test:
+	go test -v ./...

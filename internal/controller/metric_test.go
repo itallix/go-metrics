@@ -76,7 +76,7 @@ func TestMetricHandler_UpdateOne(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	metricStorage := memory.NewMemStorage(context.Background(), nil)
+	metricStorage := memory.NewMemStorage(context.Background(), nil, nil)
 	metricController := controller.NewMetricController(metricStorage)
 
 	router.POST(requestPath, metricController.UpdateOne)
@@ -139,7 +139,7 @@ func TestMetricHandler_UpdateBatch(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	metricStorage := memory.NewMemStorage(context.Background(), nil)
+	metricStorage := memory.NewMemStorage(context.Background(), nil, nil)
 	metricController := controller.NewMetricController(metricStorage)
 
 	router.POST(requestPath, metricController.UpdateBatch)
@@ -210,7 +210,7 @@ func TestMetricHandler_Value(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	ctx := context.Background()
-	metricStorage := memory.NewMemStorage(ctx, nil)
+	metricStorage := memory.NewMemStorage(ctx, nil, nil)
 	var (
 		counter int64 = 10
 		gauge         = 25.0
@@ -282,7 +282,7 @@ func TestMetricHandler_GetMetricQuery(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	ctx := context.Background()
-	metricStorage := memory.NewMemStorage(ctx, nil)
+	metricStorage := memory.NewMemStorage(ctx, nil, nil)
 	var (
 		counter int64 = 10
 		gauge         = 25.0
@@ -345,7 +345,7 @@ func TestMetricHandler_UpdateMetricQuery(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	metricStorage := memory.NewMemStorage(context.Background(), nil)
+	metricStorage := memory.NewMemStorage(context.Background(), nil, nil)
 	metricController := controller.NewMetricController(metricStorage)
 
 	router.POST(requestPath+"/:metricType/:metricName/:metricValue", metricController.UpdateMetricQuery)
@@ -365,7 +365,7 @@ func TestMetricHandler_List(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	ctx := context.Background()
-	metricStorage := memory.NewMemStorage(ctx, nil)
+	metricStorage := memory.NewMemStorage(ctx, nil, nil)
 	var (
 		counter int64 = 10
 		gauge         = 25.0

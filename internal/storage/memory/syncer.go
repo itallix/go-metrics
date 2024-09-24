@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/itallix/go-metrics/internal/logger"
@@ -42,19 +43,15 @@ func NewFileSyncer(config *Config, counters *ConcurrentMap[int64], gauges *Concu
 	}
 }
 
-func ToMetrics(counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64]) []*model.Metrics {
+func toMetrics(counters *ConcurrentMap[int64], gauges *ConcurrentMap[float64]) []*model.Metrics {
 	metrics := make([]*model.Metrics, counters.Len()+gauges.Len())
 	i := 0
 	for k, v := range counters.Copy() {
-		cv := v
-		c := model.NewCounter(k, &cv)
-		metrics[i] = c
+		metrics[i] = model.NewCounter(k, &v)
 		i++
 	}
 	for k, v := range gauges.Copy() {
-		gv := v
-		g := model.NewGauge(k, &gv)
-		metrics[i] = g
+		metrics[i] = model.NewGauge(k, &v)
 		i++
 	}
 	return metrics
@@ -67,7 +64,7 @@ func (s *FileSyncer) sync(filepath string) error {
 		return err
 	}
 	encoder := json.NewEncoder(file)
-	metrics := ToMetrics(s.counters, s.gauges)
+	metrics := toMetrics(s.counters, s.gauges)
 	if err = encoder.Encode(metrics); err != nil {
 		return err
 	}
@@ -75,31 +72,45 @@ func (s *FileSyncer) sync(filepath string) error {
 	return nil
 }
 
-func (s *FileSyncer) Start(ctx context.Context) {
+func (s *FileSyncer) Start(ctx context.Context, wg *sync.WaitGroup) {
 	if s.config.restore {
 		if err := s.load(s.config.filepath); err != nil {
 			logger.Log().Errorf("Error loading metrics from file: %v", err)
 		}
 	}
+	handleSync := func(close bool) {
+		if close {
+			logger.Log().Info("Syncing storage with the filesystem due to graceful shutdown...")
+		}
+		if err := s.sync(s.config.filepath); err != nil {
+			logger.Log().Errorf("Error syncing to the file: %v", err)
+		}
+	}
+	wg.Add(1)
 	if s.config.interval == 0 {
 		go func() {
-			for range s.syncCh {
-				if err := s.sync(s.config.filepath); err != nil {
-					logger.Log().Errorf("Error syncing to the file: %v", err)
+			defer wg.Done()
+			for {
+				select {
+				case <-s.syncCh:
+					handleSync(false)
+				case <-ctx.Done():
+					handleSync(true)
+					return
 				}
 			}
 		}()
 	} else {
 		go func() {
+			defer wg.Done()
 			tickerStore := time.NewTicker(time.Duration(s.config.interval) * time.Second)
 			defer tickerStore.Stop()
 			for {
 				select {
 				case <-tickerStore.C:
-					if err := s.sync(s.config.filepath); err != nil {
-						logger.Log().Errorf("Error syncing to the file: %v", err)
-					}
+					handleSync(false)
 				case <-ctx.Done():
+					handleSync(true)
 					return
 				}
 			}
