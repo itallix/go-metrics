@@ -20,6 +20,7 @@ func TestServerConfig_Parse(t *testing.T) {
 		wantKey           string
 		wantDSN           string
 		wantCryptoKey     string
+		wantTrustedSubnet string
 	}{
 		{
 			name:              "Default",
@@ -30,10 +31,12 @@ func TestServerConfig_Parse(t *testing.T) {
 			wantKey:           "",
 			wantDSN:           "",
 			wantCryptoKey:     "",
+			wantTrustedSubnet: "",
 		},
 		{
-			name:              "WithArgs",
-			giveArgs:          []string{"-a", "localhost:8081", "-i", "400", "-f", "filepath", "-d", "dsn", "-k", "key", "-crypto-key", "cryptoKey"},
+			name: "WithArgs",
+			giveArgs: []string{"-a", "localhost:8081", "-i", "400", "-f", "filepath", "-d", "dsn",
+				"-k", "key", "-crypto-key", "cryptoKey", "-t", "192.168.2.0/24"},
 			wantAddr:          "localhost:8081",
 			wantFilepath:      "filepath",
 			wantStoreInterval: 400,
@@ -41,6 +44,7 @@ func TestServerConfig_Parse(t *testing.T) {
 			wantKey:           "key",
 			wantDSN:           "dsn",
 			wantCryptoKey:     "cryptoKey",
+			wantTrustedSubnet: "192.168.2.0/24",
 		},
 	}
 
@@ -60,6 +64,7 @@ func TestServerConfig_Parse(t *testing.T) {
 			assert.Equal(t, tt.wantKey, cfg.Key)
 			assert.Equal(t, tt.wantDSN, cfg.DatabaseDSN)
 			assert.Equal(t, tt.wantCryptoKey, cfg.CryptoKey)
+			assert.Equal(t, tt.wantTrustedSubnet, cfg.TrustedSubnet)
 		})
 	}
 }

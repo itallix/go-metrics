@@ -155,6 +155,7 @@ func (m *agent) send(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []mode
 
 		var resp *resty.Response
 		request := m.Client.R().
+			SetHeader(model.XRealIPHeader, GetLocalIP()).
 			SetHeader("Content-Encoding", "gzip").
 			SetBody(buf.Bytes())
 		if m.HashService != nil {

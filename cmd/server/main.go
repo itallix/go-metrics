@@ -59,6 +59,9 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.LoggerWithZap(logger.Log()))
+	if serverConfig.TrustedSubnet != "" {
+		router.Use(middleware.CheckIPAddr(serverConfig.TrustedSubnet))
+	}
 	if serverConfig.Key != "" {
 		router.Use(middleware.VerifyHash(service.NewHashService(serverConfig.Key)))
 	}

@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	defaultServerURL = "localhost:8080"
-	defaultPollInterval = 2
+	defaultServerURL      = "localhost:8080"
+	defaultPollInterval   = 2
 	defaultReportInterval = 10
-	defaultRateLimit = 3
+	defaultRateLimit      = 3
 )
 
 func parseConfig() (*model.AgentConfig, error) {
@@ -29,10 +29,10 @@ func parseConfig() (*model.AgentConfig, error) {
 	flag.Parse()
 
 	cfg := model.AgentConfig{
-		ServerURL: defaultServerURL,
-		PollInterval: defaultPollInterval,
+		ServerURL:      defaultServerURL,
+		PollInterval:   defaultPollInterval,
 		ReportInterval: defaultReportInterval,
-		RateLimit: defaultRateLimit,
+		RateLimit:      defaultRateLimit,
 	}
 	if configPath != "" {
 		err := model.ParseFileConfig(configPath, &cfg)
