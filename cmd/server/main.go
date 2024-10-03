@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,16 +15,22 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/itallix/go-metrics/internal/controller"
+	"github.com/itallix/go-metrics/internal/grpc/api"
+	pb "github.com/itallix/go-metrics/internal/grpc/proto"
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/middleware"
+	"github.com/itallix/go-metrics/internal/model"
 	"github.com/itallix/go-metrics/internal/service"
 	"github.com/itallix/go-metrics/internal/storage"
 	"github.com/itallix/go-metrics/internal/storage/db"
 	"github.com/itallix/go-metrics/internal/storage/memory"
 
 	_ "github.com/jackc/pgx"
+	_ "google.golang.org/grpc/encoding/gzip"
 )
 
 const (
@@ -38,6 +45,20 @@ var (
 	buildDate    string
 	buildCommit  string
 )
+
+func startGrpcServer(grpcServer *grpc.Server, storage storage.Storage) {
+	grpcServerAddr := "localhost:" + model.GRPCPort
+	lis, err := net.Listen("tcp", grpcServerAddr)
+	if err != nil {
+		logger.Log().Fatalf("failed to run gRPC server: %v", err)
+	}
+	pb.RegisterMetricsServer(grpcServer, api.NewServer(storage))
+	reflection.Register(grpcServer)
+	logger.Log().Infof("GRPC server is starting on %s...", grpcServerAddr)
+	if err := grpcServer.Serve(lis); err != nil {
+		logger.Log().Fatalf("failed to run gRPC server: %v", err)
+	}
+}
 
 func main() {
 	if err := logger.Initialize("debug"); err != nil {
@@ -113,14 +134,21 @@ func main() {
 		WriteTimeout: WriteTimeoutSeconds * time.Second,
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
+	grpcServer := grpc.NewServer()
+	go startGrpcServer(grpcServer, mStorage)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
 	go func() {
 		<-quit
-		logger.Log().Info("Shutting down server gracefully...")
+		logger.Log().Info("Shutting down servers gracefully...")
 		cancel()
 		wg.Wait()
+
+		logger.Log().Info("Stopping gRPC server...")
+		grpcServer.GracefulStop()
+
+		logger.Log().Info("Stopping HTTP server...")
 		ctx, cancelTimeout := context.WithTimeout(context.Background(), ShutdownTimeoutSeconds*time.Second)
 		defer cancelTimeout()
 		if err := server.Shutdown(ctx); err != nil {

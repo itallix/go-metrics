@@ -2,6 +2,7 @@ package main
 
 import "net"
 
+// GetLocalIP returns IP address value which is different from loopback.
 func GetLocalIP() string {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {

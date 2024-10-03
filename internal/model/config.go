@@ -29,6 +29,7 @@ type AgentConfig struct {
 	Key            string `env:"KEY" json:"hash_secret"`                 // Secret for a hash function.
 	RateLimit      int    `env:"RATE_LIMIT" json:"rate_limit"`           // Limits number of concurrent requests to the server.
 	CryptoKey      string `env:"CRYPTO_KEY" json:"crypto_key"`           // Public key used to encrypt request payload.
+	Schema         string `env:"SCHEMA" json:"schema"`                   // Protocol (http or grpc) to communicate with the server.
 }
 
 var re = regexp.MustCompile(`("\w*_interval"):\s*"(\d+)s`)

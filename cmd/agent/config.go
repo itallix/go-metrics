@@ -13,6 +13,7 @@ const (
 	defaultPollInterval   = 2
 	defaultReportInterval = 10
 	defaultRateLimit      = 3
+	defaultSchema         = "http"
 )
 
 func parseConfig() (*model.AgentConfig, error) {
@@ -26,6 +27,7 @@ func parseConfig() (*model.AgentConfig, error) {
 	key := flag.String("k", "", "Key that will be used to calculate hash")
 	rateLimit := flag.Int("l", defaultRateLimit, "Max number of concurrent requests to the server")
 	cryptoKey := flag.String("crypto-key", "", "Path to public key that will be used for payload encryption")
+	schema := flag.String("schema", defaultSchema, "Communication protocol between agent and server")
 	flag.Parse()
 
 	cfg := model.AgentConfig{
@@ -33,6 +35,7 @@ func parseConfig() (*model.AgentConfig, error) {
 		PollInterval:   defaultPollInterval,
 		ReportInterval: defaultReportInterval,
 		RateLimit:      defaultRateLimit,
+		Schema:         defaultSchema,
 	}
 	if configPath != "" {
 		err := model.ParseFileConfig(configPath, &cfg)
@@ -57,6 +60,9 @@ func parseConfig() (*model.AgentConfig, error) {
 	}
 	if *cryptoKey != "" {
 		cfg.CryptoKey = *cryptoKey
+	}
+	if *schema != defaultSchema {
+		cfg.Schema = *schema
 	}
 	if err := env.Parse(&cfg); err != nil {
 		return nil, err

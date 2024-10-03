@@ -18,7 +18,10 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
+	"google.golang.org/grpc"
+	grpc_gzip "google.golang.org/grpc/encoding/gzip"
 
+	pb "github.com/itallix/go-metrics/internal/grpc/proto"
 	"github.com/itallix/go-metrics/internal/logger"
 	"github.com/itallix/go-metrics/internal/model"
 	"github.com/itallix/go-metrics/internal/service"
@@ -38,7 +41,8 @@ var RuntimeMetrics = []string{
 type agent struct {
 	runtime.MemStats
 
-	Client      *resty.Client
+	HTTPClient  *resty.Client
+	GRPCClient  *GRPCMetricsClient
 	Counter     int64
 	Gauges      map[string]model.Metrics
 	HashService service.HashService
@@ -48,7 +52,7 @@ type agent struct {
 	cryptoKey   string
 }
 
-func newAgent(client *resty.Client, secretKey string, cryptoKey string) (*agent, error) {
+func newAgent(httpClient *resty.Client, grpcClient *GRPCMetricsClient, secretKey string, cryptoKey string) (*agent, error) {
 	var hashService service.HashService
 	if secretKey != "" {
 		hashService = service.NewHashService(secretKey)
@@ -59,7 +63,8 @@ func newAgent(client *resty.Client, secretKey string, cryptoKey string) (*agent,
 	}
 
 	return &agent{
-		Client:      client,
+		HTTPClient:  httpClient,
+		GRPCClient:  grpcClient,
 		Gauges:      make(map[string]model.Metrics),
 		HashService: hashService,
 		RetryDelays: []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
@@ -124,6 +129,48 @@ func (m *agent) collectExtra() error {
 }
 
 func (m *agent) send(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []model.Metrics, results chan<- error) {
+	if m.HTTPClient != nil {
+		m.sendHTTP(ctx, wg, jobs, results)
+		return
+	}
+	m.sendGRPC(ctx, wg, jobs, results)
+}
+
+func (m *agent) sendGRPC(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []model.Metrics, results chan<- error) {
+	defer wg.Done()
+	for metrics := range jobs {
+		logger.Log().Info("Processing job with batch of metrics")
+
+		req := pb.UpdateMetricsRequest{}
+
+		for _, m := range metrics {
+			var mtype pb.Metric_MType
+			switch m.MType {
+			case model.Counter:
+				mtype = 1
+			case model.Gauge:
+				mtype = 2
+			}
+			req.Metrics = append(req.Metrics, &pb.Metric{
+				Id:    m.ID,
+				Mtype: mtype,
+				Delta: m.Delta,
+				Value: m.Value,
+			})
+		}
+
+		_, err := m.GRPCClient.UpdateMetrics(ctx, &req, grpc.UseCompressor(grpc_gzip.Name))
+		if err != nil {
+			results <- err
+			continue
+		}
+
+		m.Counter = 0
+		results <- nil
+	}
+}
+
+func (m *agent) sendHTTP(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []model.Metrics, results chan<- error) {
 	defer wg.Done()
 	for metrics := range jobs {
 		logger.Log().Info("Processing job with batch of metrics")
@@ -154,7 +201,7 @@ func (m *agent) send(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []mode
 		}
 
 		var resp *resty.Response
-		request := m.Client.R().
+		request := m.HTTPClient.R().
 			SetHeader(model.XRealIPHeader, GetLocalIP()).
 			SetHeader("Content-Encoding", "gzip").
 			SetBody(buf.Bytes())
