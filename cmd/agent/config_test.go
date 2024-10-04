@@ -12,7 +12,7 @@ import (
 func TestAgentConfig_Parse(t *testing.T) {
 	tests := []struct {
 		name          string
-		giveArgs 	  []string
+		giveArgs      []string
 		wantAddr      string
 		wantPoll      int
 		wantReport    int
@@ -31,7 +31,7 @@ func TestAgentConfig_Parse(t *testing.T) {
 		},
 		{
 			name:          "WithArgs",
-			giveArgs: 	   []string{"-a", "localhost:8081", "-p", "4", "-r", "20", "-k", "key", "-l", "5", "-crypto-key", "cryptoKey"},
+			giveArgs:      []string{"-a", "localhost:8081", "-p", "4", "-r", "20", "-k", "key", "-l", "5", "-crypto-key", "cryptoKey"},
 			wantAddr:      "localhost:8081",
 			wantPoll:      4,
 			wantReport:    20,

@@ -34,6 +34,7 @@ func TestParseServerConfig(t *testing.T) {
 		StoreInterval: 1,
 		FilePath:      "/path/to/file.db",
 		CryptoKey:     "/path/to/key.pem",
+		TrustedSubnet: "192.168.2.0/24",
 	}
 
 	var cfg ServerConfig
@@ -47,4 +48,5 @@ func TestParseServerConfig(t *testing.T) {
 	assert.Equal(t, wantConfig.Key, cfg.Key)
 	assert.Equal(t, wantConfig.DatabaseDSN, cfg.DatabaseDSN)
 	assert.Equal(t, wantConfig.CryptoKey, cfg.CryptoKey)
+	assert.Equal(t, wantConfig.TrustedSubnet, cfg.TrustedSubnet)
 }

@@ -18,6 +18,7 @@ type ServerConfig struct {
 	DatabaseDSN   string `env:"DATABASE_DSN" json:"database_dsn"`     // DB connection string, example: postgresql://username:password@hostname:port/database_name.
 	Key           string `env:"KEY" json:"hash_secret"`               // Secret for a hash function.
 	CryptoKey     string `env:"CRYPTO_KEY" json:"crypto_key"`         // Private key used to decrypt request payload.
+	TrustedSubnet string `env:"TRUSTED_SUBNET" json:"trusted_subnet"` // Whitelisted CIDR subnet addr.
 }
 
 // AgentConfig describes customization settings for the agent.
@@ -28,6 +29,7 @@ type AgentConfig struct {
 	Key            string `env:"KEY" json:"hash_secret"`                 // Secret for a hash function.
 	RateLimit      int    `env:"RATE_LIMIT" json:"rate_limit"`           // Limits number of concurrent requests to the server.
 	CryptoKey      string `env:"CRYPTO_KEY" json:"crypto_key"`           // Public key used to encrypt request payload.
+	Schema         string `env:"SCHEMA" json:"schema"`                   // Protocol (http or grpc) to communicate with the server.
 }
 
 var re = regexp.MustCompile(`("\w*_interval"):\s*"(\d+)s`)
