@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/realip"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -46,13 +48,13 @@ var (
 	buildCommit  string
 )
 
-func startGrpcServer(grpcServer *grpc.Server, storage storage.Storage) {
+func startGrpcServer(grpcServer *grpc.Server, storage storage.Storage, hasher service.HashService) {
 	grpcServerAddr := "localhost:" + model.GRPCPort
 	lis, err := net.Listen("tcp", grpcServerAddr)
 	if err != nil {
 		logger.Log().Fatalf("failed to run gRPC server: %v", err)
 	}
-	pb.RegisterMetricsServer(grpcServer, api.NewServer(storage))
+	pb.RegisterMetricsServer(grpcServer, api.NewServer(storage, hasher))
 	reflection.Register(grpcServer)
 	logger.Log().Infof("GRPC server is starting on %s...", grpcServerAddr)
 	if err := grpcServer.Serve(lis); err != nil {
@@ -83,8 +85,10 @@ func main() {
 	if serverConfig.TrustedSubnet != "" {
 		router.Use(middleware.CheckIPAddr(serverConfig.TrustedSubnet))
 	}
+	var hashService service.HashService
 	if serverConfig.Key != "" {
-		router.Use(middleware.VerifyHash(service.NewHashService(serverConfig.Key)))
+		hashService = service.NewHashService(serverConfig.Key)
+		router.Use(middleware.VerifyHash(hashService))
 	}
 	if serverConfig.CryptoKey != "" {
 		router.Use(middleware.DecryptMiddleware(serverConfig.CryptoKey))
@@ -134,8 +138,25 @@ func main() {
 		WriteTimeout: WriteTimeoutSeconds * time.Second,
 		IdleTimeout:  IdleTimeoutSeconds * time.Second,
 	}
-	grpcServer := grpc.NewServer()
-	go startGrpcServer(grpcServer, mStorage)
+
+	var grpcServer *grpc.Server
+	if serverConfig.TrustedSubnet != "" {
+		trustedPeers := []netip.Prefix{
+			netip.MustParsePrefix(serverConfig.TrustedSubnet),
+		}
+		opts := []realip.Option{
+			realip.WithTrustedPeers(trustedPeers),
+			realip.WithHeaders([]string{model.XRealIPHeader}),
+		}
+		grpcServer = grpc.NewServer(
+			grpc.ChainUnaryInterceptor(
+				realip.UnaryServerInterceptorOpts(opts...),
+			),
+		)
+	} else {
+		grpcServer = grpc.NewServer()
+	}
+	go startGrpcServer(grpcServer, mStorage, hashService)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)

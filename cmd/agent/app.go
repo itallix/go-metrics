@@ -20,6 +20,8 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 	"google.golang.org/grpc"
 	grpc_gzip "google.golang.org/grpc/encoding/gzip"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/itallix/go-metrics/internal/grpc/proto"
 	"github.com/itallix/go-metrics/internal/logger"
@@ -159,7 +161,18 @@ func (m *agent) sendGRPC(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []
 			})
 		}
 
-		_, err := m.GRPCClient.UpdateMetrics(ctx, &req, grpc.UseCompressor(grpc_gzip.Name))
+		var md = metadata.Pairs(model.XRealIPHeader, GetLocalIP())
+		if m.HashService != nil {
+			reqBytes, err := proto.Marshal(&req)
+			if err != nil {
+				results <- fmt.Errorf("issue marshalling grpc request object to bytes: %w", err)
+				continue
+			}
+			md.Set(model.HashSha256Header, m.HashService.Sha256sum(reqBytes))
+		}
+		mdCtx := metadata.NewOutgoingContext(ctx, md)
+
+		_, err := m.GRPCClient.UpdateMetrics(mdCtx, &req, grpc.UseCompressor(grpc_gzip.Name))
 		if err != nil {
 			results <- err
 			continue
