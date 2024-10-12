@@ -51,9 +51,21 @@ func main() {
 	reportPoll := time.NewTicker(time.Duration(config.ReportInterval) * time.Second)
 	defer reportPoll.Stop()
 
-	client := resty.New().SetBaseURL("http://"+config.ServerURL).
-		SetHeader("Content-Type", "application/json")
-	metricsAgent, err := newAgent(client, config.Key, config.CryptoKey)
+	var (
+		httpClient *resty.Client
+		grpcClient *GRPCMetricsClient
+	)
+	if config.Schema == "http" {
+		httpClient = resty.New().SetBaseURL("http://"+config.ServerURL).
+			SetHeader("Content-Type", "application/json")
+	} else if config.Schema == "grpc" {
+		client, err := NewGrpcClient()
+		if err != nil {
+			logger.Log().Fatalf("Failed to create a new grpc client: %v", err)
+		}
+		grpcClient = client
+	}
+	metricsAgent, err := newAgent(httpClient, grpcClient, config.Key, config.CryptoKey)
 	if err != nil {
 		logger.Log().Fatalf("Failed to instantiate agent: %v", err)
 	}
@@ -112,4 +124,7 @@ func main() {
 	// waiting for all workers that send metrics to the server to finish
 	wg.Wait()
 	close(results)
+	if grpcClient != nil {
+		grpcClient.Close()
+	}
 }

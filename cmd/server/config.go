@@ -9,17 +9,17 @@ import (
 )
 
 const (
-	defaultAddress = "localhost:8080"
+	defaultAddress       = "localhost:8080"
 	defaultStoreInterval = 300
-	defaultFilePath = "/tmp/metrics-db.json"
-	defaultRestore = true
+	defaultFilePath      = "/tmp/metrics-db.json"
+	defaultRestore       = true
 )
 
 func parseConfig() (*model.ServerConfig, error) {
 	var configPath string
 	flag.StringVar(&configPath, "config", "", "Path to config file")
 	flag.StringVar(&configPath, "c", "", "Path to config file (shorthand)")
-	
+
 	addr := flag.String("a", defaultAddress, "Net address host:port")
 	storeInterval := flag.Int("i", defaultStoreInterval, "Store interval in seconds")
 	filePath := flag.String("f", defaultFilePath, "Filepath where metrics will be saved")
@@ -27,13 +27,14 @@ func parseConfig() (*model.ServerConfig, error) {
 	dsn := flag.String("d", "", "Database connection string")
 	key := flag.String("k", "", "Key that will be used to calculate hash")
 	cryptoKey := flag.String("crypto-key", "", "Private key that will be used to decrypt the request payload")
+	trustedSubnet := flag.String("t", "", "Whitelisted subnet in CIDR format")
 	flag.Parse()
 
 	cfg := model.ServerConfig{
-		Address: defaultAddress,
+		Address:       defaultAddress,
 		StoreInterval: defaultStoreInterval,
-		FilePath: defaultFilePath,
-		Restore: defaultRestore,
+		FilePath:      defaultFilePath,
+		Restore:       defaultRestore,
 	}
 	if configPath != "" {
 		err := model.ParseFileConfig(configPath, &cfg)
@@ -61,6 +62,9 @@ func parseConfig() (*model.ServerConfig, error) {
 	}
 	if *cryptoKey != "" {
 		cfg.CryptoKey = *cryptoKey
+	}
+	if *trustedSubnet != "" {
+		cfg.TrustedSubnet = *trustedSubnet
 	}
 	if err := env.Parse(&cfg); err != nil {
 		return nil, err

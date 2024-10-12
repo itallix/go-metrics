@@ -6,6 +6,8 @@ My pet project to learn Golang with Yandex Practicum [Advanced Go Developer](htt
 
 `go-metrics` is a robust, scalable metrics collection system designed for distributed environments. It consists of two main components: an agent that collects and sends metrics in batches, and a server that receives, processes, and exposes these metrics through a RESTful API.
 
+![Server-Agent](./doc/server-agent.png)
+
 ## Key Features
 
 - Efficient Metric Collection: Agents collect system and application metrics with minimal overhead.
@@ -30,7 +32,13 @@ My pet project to learn Golang with Yandex Practicum [Advanced Go Developer](htt
 
 ## REST API Endpoints
 
-_TBD_
+- GET / - list all metrics as an HTML page
+- POST /update { "id": "cpu", "type": "gauge", "value": 23.46 } - update one metric
+- POST /updates - update the batch of metrics
+- POST /value { "id": "cpu", "type": "gauge" } - get one metric
+- POST /update/gauge/cpu/23.46 - update one metric
+- GET /value/gauge/cpu - read metric value
+- GET /ping - check database status (if started in DB mode)
 
 ## Tech Stack
 
